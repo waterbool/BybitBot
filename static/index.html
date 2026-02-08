@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bybit Trading Bot - Control Panel</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>🚀 Bybit Trading Bot</h1>
+                <div class="status-indicator" id="botStatus">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Idle</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="dashboard">📊 Dashboard</button>
+            <button class="tab-btn" data-tab="config">⚙️ Configuration</button>
+            <button class="tab-btn" data-tab="backtest">📈 Backtest</button>
+            <button class="tab-btn" data-tab="trading">💹 Live Trading</button>
+            <button class="tab-btn" data-tab="logs">📝 Logs</button>
+        </nav>
+
+        <!-- Tab Content -->
+        <main class="content">
+            <!-- Dashboard Tab -->
+            <div class="tab-content active" id="dashboard">
+                <div class="grid">
+                    <!-- Stats Cards -->
+                    <div class="card stats-card">
+                        <h3>Total Trades</h3>
+                        <div class="stat-value" id="totalTrades">0</div>
+                    </div>
+                    <div class="card stats-card">
+                        <h3>Win Rate</h3>
+                        <div class="stat-value" id="winRate">0%</div>
+                    </div>
+                    <div class="card stats-card">
+                        <h3>Total PnL</h3>
+                        <div class="stat-value" id="totalPnl">$0.00</div>
+                    </div>
+                    <div class="card stats-card">
+                        <h3>Daily Trades</h3>
+                        <div class="stat-value" id="dailyTrades">0</div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="card chart-card">
+                    <h3>Performance Chart</h3>
+                    <canvas id="performanceChart"></canvas>
+                </div>
+
+                <!-- Recent Trades -->
+                <div class="card">
+                    <h3>Recent Trades</h3>
+                    <div class="table-container">
+                        <table id="recentTradesTable">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Side</th>
+                                    <th>Entry</th>
+                                    <th>SL</th>
+                                    <th>TP</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentTradesBody">
+                                <tr><td colspan="6" class="no-data">No trades yet</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Configuration Tab -->
+            <div class="tab-content" id="config">
+                <div class="card">
+                    <h3>Bot Configuration</h3>
+                    <form id="configForm">
+                        <div class="form-section">
+                            <h4>API Settings</h4>
+                            <div class="form-group">
+                                <label>API Key</label>
+                                <input type="text" id="apiKey" placeholder="Your API Key">
+                            </div>
+                            <div class="form-group">
+                                <label>API Secret</label>
+                                <input type="password" id="apiSecret" placeholder="Your API Secret">
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="testnet">
+                                    Use Testnet
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <h4>Trading Settings</h4>
+                            <div class="form-group">
+                                <label>Symbol</label>
+                                <input type="text" id="symbol" value="ETHUSDT">
+                            </div>
+                            <div class="form-group">
+                                <label>Timeframe (minutes)</label>
+                                <input type="number" id="timeframe" value="5">
+                            </div>
+                            <div class="form-group">
+                                <label>Fixed Position Size (USDT)</label>
+                                <input type="number" id="fixedSize" value="2.0" step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="dryRun" checked>
+                                    Dry Run Mode (No Real Orders)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <h4>Strategy Parameters</h4>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>EMA Fast</label>
+                                    <input type="number" id="emaFast" value="9">
+                                </div>
+                                <div class="form-group">
+                                    <label>EMA Slow</label>
+                                    <input type="number" id="emaSlow" value="21">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>ATR Period</label>
+                                    <input type="number" id="atrPeriod" value="14">
+                                </div>
+                                <div class="form-group">
+                                    <label>SL ATR Multiplier</label>
+                                    <input type="number" id="slAtrMult" value="3.0" step="0.1">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Risk/Reward Ratio</label>
+                                <input type="number" id="riskReward" value="1.5" step="0.1">
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <h4>Risk Management</h4>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Max Trades Per Day</label>
+                                    <input type="number" id="maxTrades" value="10">
+                                </div>
+                                <div class="form-group">
+                                    <label>Max Daily Loss (USDT)</label>
+                                    <input type="number" id="maxLoss" value="10.0" step="0.1">
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Save Configuration</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Backtest Tab -->
+            <div class="tab-content" id="backtest">
+                <div class="card">
+                    <h3>Backtest Parameters</h3>
+                    <form id="backtestForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Days to Test</label>
+                                <input type="number" id="backtestDays" value="7" min="1" max="30">
+                            </div>
+                            <div class="form-group">
+                                <label>Initial Balance (USDT)</label>
+                                <input type="number" id="backtestBalance" value="1000" step="100">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Position Size (USDT)</label>
+                                <input type="number" id="backtestSize" value="2.0" step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label>Win Rate (0-1)</label>
+                                <input type="number" id="backtestWinRate" value="0.85" step="0.01" min="0" max="1">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Run Backtest</button>
+                    </form>
+                </div>
+
+                <div class="card" id="backtestResults" style="display: none;">
+                    <h3>Backtest Results</h3>
+                    <div class="grid">
+                        <div class="metric">
+                            <span class="metric-label">Final Balance</span>
+                            <span class="metric-value" id="btFinalBalance">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Total Trades</span>
+                            <span class="metric-value" id="btTotalTrades">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Win Rate</span>
+                            <span class="metric-value" id="btWinRate">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Max Drawdown</span>
+                            <span class="metric-value" id="btMaxDrawdown">-</span>
+                        </div>
+                    </div>
+                    <canvas id="backtestChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Live Trading Tab -->
+            <div class="tab-content" id="trading">
+                <div class="card">
+                    <h3>Trading Controls</h3>
+                    <div class="trading-controls">
+                        <button id="startBtn" class="btn btn-success">▶️ Start Trading</button>
+                        <button id="stopBtn" class="btn btn-danger" disabled>⏹️ Stop Trading</button>
+                    </div>
+                    <div class="alert alert-warning">
+                        ⚠️ Make sure to review your configuration before starting live trading!
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Current Position</h3>
+                    <div id="currentPosition" class="position-info">
+                        <p class="no-data">No active position</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>Trading Statistics</h3>
+                    <div class="grid">
+                        <div class="metric">
+                            <span class="metric-label">Status</span>
+                            <span class="metric-value" id="tradingStatus">Idle</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Daily Trades</span>
+                            <span class="metric-value" id="tradingDailyTrades">0</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Daily PnL</span>
+                            <span class="metric-value" id="tradingDailyPnl">$0.00</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Symbol</span>
+                            <span class="metric-value" id="tradingSymbol">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Tab -->
+            <div class="tab-content" id="logs">
+                <div class="card">
+                    <h3>System Logs</h3>
+                    <div class="logs-container" id="logsContainer">
+                        <div class="log-entry">
+                            <span class="log-time">--:--:--</span>
+                            <span class="log-level info">INFO</span>
+                            <span class="log-message">Waiting for logs...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

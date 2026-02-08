@@ -1,0 +1,39 @@
+# Bybit Trading Bot Configuration
+
+# API Keys (Replace with your own keys)
+# For Testnet, get keys from https://testnet.bybit.com
+# For Mainnet, get keys from https://www.bybit.com
+api:
+  api_key: "YOUR_API_KEY_HERE"
+  api_secret: "YOUR_API_SECRET_HERE"
+  testnet: true # Set to false for real trading
+
+# Trading Settings
+trading:
+  symbol: "ETHUSDT"
+  category: "linear" # linear for USDT Perpetual
+  max_leverage: 10 # Leverage (1-10)
+  fixed_usdt_size: 2.0 # Fixed position size in USDT (e.g., 2 USDT)
+  dry_run: true # If true, no real orders will be placed
+
+# Strategy Settings
+strategy:
+  timeframe: "D" # Timeframe: "D" for Daily
+  ema_fast: 9
+  ema_slow: 21
+  atr_period: 20
+  risk_reward_ratio: 1.5 # Target Risk/Reward
+  sl_atr_multiplier: 2.0 # Stop Loss distance in ATRs (Standard 2.0 for this strategy)
+  volume_ma_period: 20 # Period for Volume SMA
+  trading_start_hour: 8 # Start trading at 08:00 UTC (example)
+  trading_end_hour: 20 # Stop trading at 20:00 UTC (example)
+  volume_multiplier: 1.2
+  volume_lookback: 20
+  levels_lookback: 10
+
+
+# Risk Management
+risk:
+  max_trades_per_day: 10
+  max_daily_loss_usdt: 10.0
+
