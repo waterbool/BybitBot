@@ -1,138 +1,188 @@
 import pandas as pd
 import numpy as np
 
-def run_backtest(df: pd.DataFrame, initial_balance: float, bet_size: float, expiry_minutes: int = 1, payout_rate: float = 0.80) -> dict:
+from config import settings
+from indicators.ta_module import add_indicators
+from strategy.rules import apply_strategy
+
+
+def _calc_tp_sl(entry_price: float, side: int, atr: float) -> tuple[float, float]:
+    sl_dist = atr * settings.SL_ATR_MULT
+    tp_dist = atr * settings.RISK_REWARD_RATIO
+    if side == 1:
+        sl = entry_price - sl_dist
+        tp = entry_price + tp_dist
+    else:
+        sl = entry_price + sl_dist
+        tp = entry_price - tp_dist
+    return tp, sl
+
+
+def run_backtest(
+    df: pd.DataFrame,
+    initial_balance: float,
+    taker_fee_rate: float = 0.00055,
+    slippage_rate: float = 0.0002,
+    funding_rate_per_bar: float = 0.0,
+) -> tuple[dict, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
-    Runs a backtest on the provided DataFrame with 'signal' column.
-    
-    Args:
-        df: DataFrame with 'close' prices and 'signal' column (1, -1, 0).
-        initial_balance: Starting balance for the account.
-        bet_size: Amount risked per trade.
-        expiry_minutes: Duration of the option in minutes (candles).
-        payout_rate: Profit rate for winning trades (e.g., 0.80 for 80%).
-        
-    Returns:
-        dict: A dictionary containing backtest metrics.
+    Backtest using the same EMA crossover strategy as live, with optional ML filter.
+    Pipeline per step: indicators -> ML -> decision -> trade.
     """
     df = df.copy()
-    balance = initial_balance
-    trades = []
-    
-    # Ensure signal column exists
-    if 'signal' not in df.columns:
-        raise ValueError("DataFrame must contain 'signal' column")
 
-    # Iterate through the DataFrame to find signals
-    # Using iterrows is generally slow, but necessary for sequential balance updates if bet size is dynamic (compounding).
-    # Since bet_size is fixed here, we could vectorize, but requirement asks for clean logic without global vars, simple loop is fine.
-    
-    # We need to access future prices, so index access is better.
-    # Assuming standard RangeIndex or careful usage of iloc.
-    
+    # Indicators (same as live)
+    df = add_indicators(
+        df,
+        ema_fast=settings.EMA_FAST,
+        ema_slow=settings.EMA_SLOW,
+        atr_period=settings.ATR_PERIOD,
+    )
+
+    balance = initial_balance
+    equity_curve = []
+    trades = []
+
+    position = None  # dict with side, entry_price, qty, tp, sl, entry_time
+
     n_rows = len(df)
-    
     for i in range(n_rows):
-        signal = df.iloc[i]['signal']
-        
-        if signal == 0:
-            continue
-            
-        # Check if we have enough data for expiry
-        expiry_index = i + expiry_minutes
-        if expiry_index >= n_rows:
-            break
-            
-        entry_price = df.iloc[i]['close']
-        expiry_price = df.iloc[expiry_index]['close']
-        entry_time = df.index[i]
-        expiry_time = df.index[expiry_index]
-        
-        # Determine Outcome
-        win = False
-        if signal == 1: # CALL
-            if expiry_price > entry_price:
-                win = True
-        elif signal == -1: # PUT
-            if expiry_price < entry_price:
-                win = True
-        else:
-            continue # Should be 0, handled above
-            
-        # Calculate PnL
-        if win:
-            pnl = bet_size * payout_rate
-        else:
-            pnl = -bet_size
-            
-        balance += pnl
-        
-        trades.append({
-            'entry_time': entry_time,
-            'expiry_time': expiry_time,
-            'signal': signal,
-            'entry_price': entry_price,
-            'expiry_price': expiry_price,
-            'result': 'WIN' if win else 'LOSS',
-            'pnl': pnl,
-            'balance': balance
-        })
-        
-    # Create DataFrame from trades for easy analysis
-    trades_df = pd.DataFrame(trades)
-    
-    # Calculate Metrics
-    total_trades = len(trades)
-    if total_trades > 0:
-        win_rate = len(trades_df[trades_df['result'] == 'WIN']) / total_trades * 100
-        
-        # Max Consecutive Wins/Losses
-        # Create a boolean series: True for Win, False for Loss
-        results_bool = trades_df['result'] == 'WIN'
-        # Group by value change to identify streaks
-        streaks = results_bool.ne(results_bool.shift()).cumsum()
-        streak_counts = results_bool.groupby(streaks).agg(['value_counts']).reset_index(drop=True)
-        
-        # This is a bit complex to get cleanly with pandas in one line, let's just loop locally for simplicity and correctness
-        max_win_streak = 0
-        max_loss_streak = 0
-        current_win_streak = 0
-        current_loss_streak = 0
-        
-        for res in trades_df['result']:
-            if res == 'WIN':
-                current_win_streak += 1
-                current_loss_streak = 0
-                max_win_streak = max(max_win_streak, current_win_streak)
+        # Slice to current row to avoid future leakage
+        current_df = df.iloc[: i + 1]
+        row = current_df.iloc[-1]
+        ts = row.name
+
+        # Update equity curve (mark-to-market)
+        if position is not None:
+            if position['side'] == 1:
+                unreal = (row['close'] - position['entry_price']) * position['qty']
             else:
-                current_loss_streak += 1
-                current_win_streak = 0
-                max_loss_streak = max(max_loss_streak, current_loss_streak)
-        
-        # Drawdown
-        # High Water Mark of Balance
-        trades_df['peak_balance'] = trades_df['balance'].cummax()
-        trades_df['drawdown'] = trades_df['balance'] - trades_df['peak_balance']
-        max_drawdown = trades_df['drawdown'].min() # Negative value
-        
+                unreal = (position['entry_price'] - row['close']) * position['qty']
+            equity_curve.append({'timestamp': ts, 'equity': balance + unreal})
+        else:
+            equity_curve.append({'timestamp': ts, 'equity': balance})
+
+        # Apply funding if position open
+        if position is not None and funding_rate_per_bar != 0.0:
+            notional = row['close'] * position['qty']
+            funding = notional * funding_rate_per_bar * (1 if position['side'] == -1 else -1)
+            balance += funding
+
+        # Check exit if position is open
+        if position is not None:
+            high = row['high']
+            low = row['low']
+            exit_price = None
+            exit_reason = None
+
+            if position['side'] == 1:
+                if low <= position['sl']:
+                    exit_price = position['sl'] * (1 - slippage_rate)
+                    exit_reason = 'SL'
+                elif high >= position['tp']:
+                    exit_price = position['tp'] * (1 - slippage_rate)
+                    exit_reason = 'TP'
+            else:
+                if high >= position['sl']:
+                    exit_price = position['sl'] * (1 + slippage_rate)
+                    exit_reason = 'SL'
+                elif low <= position['tp']:
+                    exit_price = position['tp'] * (1 + slippage_rate)
+                    exit_reason = 'TP'
+
+            if exit_price is not None:
+                notional_entry = position['entry_price'] * position['qty']
+                notional_exit = exit_price * position['qty']
+                fee = (notional_entry + notional_exit) * taker_fee_rate
+                if position['side'] == 1:
+                    pnl = (exit_price - position['entry_price']) * position['qty'] - fee
+                else:
+                    pnl = (position['entry_price'] - exit_price) * position['qty'] - fee
+                balance += pnl
+                trades.append({
+                    'entry_time': position['entry_time'],
+                    'exit_time': ts,
+                    'side': 'BUY' if position['side'] == 1 else 'SELL',
+                    'entry_price': position['entry_price'],
+                    'exit_price': exit_price,
+                    'qty': position['qty'],
+                    'pnl': pnl,
+                    'result': 'WIN' if pnl > 0 else 'LOSS',
+                    'reason': exit_reason,
+                    'balance': balance,
+                })
+                position = None
+
+        # If flat, evaluate new signal
+        if position is None:
+            signal_df = apply_strategy(current_df.copy())
+            signal = int(signal_df.iloc[-1]['signal'])
+            if signal != 0:
+                atr_col = f'ATR_{settings.ATR_PERIOD}'
+                atr = row.get(atr_col)
+                if atr is None or pd.isna(atr) or atr == 0:
+                    continue
+
+                # Entry with slippage
+                if signal == 1:
+                    entry_price = row['close'] * (1 + slippage_rate)
+                else:
+                    entry_price = row['close'] * (1 - slippage_rate)
+
+                qty = round(settings.FIXED_USDT_SIZE / entry_price, 6)
+                tp, sl = _calc_tp_sl(entry_price, signal, atr)
+
+                position = {
+                    'side': signal,
+                    'entry_price': entry_price,
+                    'qty': qty,
+                    'tp': tp,
+                    'sl': sl,
+                    'entry_time': ts,
+                }
+
+    trades_df = pd.DataFrame(trades)
+    equity_df = pd.DataFrame(equity_curve)
+
+    if not equity_df.empty:
+        equity_df['peak'] = equity_df['equity'].cummax()
+        equity_df['drawdown'] = equity_df['equity'] - equity_df['peak']
+        max_drawdown = float(equity_df['drawdown'].min())
     else:
-        win_rate = 0
-        max_win_streak = 0
-        max_loss_streak = 0
-        max_drawdown = 0
-        
+        max_drawdown = 0.0
+
+    if not trades_df.empty:
+        gross_profit = trades_df[trades_df['pnl'] > 0]['pnl'].sum()
+        gross_loss = -trades_df[trades_df['pnl'] < 0]['pnl'].sum()
+        profit_factor = float(gross_profit / gross_loss) if gross_loss > 0 else float('inf')
+        total_trades = len(trades_df)
+    else:
+        profit_factor = 0.0
+        total_trades = 0
+
+    # Monthly stats
+    if not trades_df.empty:
+        trades_df['exit_time'] = pd.to_datetime(trades_df['exit_time'])
+        monthly = trades_df.groupby(trades_df['exit_time'].dt.to_period('M')).agg(
+            trades=('pnl', 'count'),
+            pnl=('pnl', 'sum'),
+            win_rate=('pnl', lambda x: (x > 0).mean() * 100.0),
+        ).reset_index()
+        monthly['month'] = monthly['exit_time'].astype(str)
+        monthly_stats = monthly[['month', 'trades', 'pnl', 'win_rate']]
+    else:
+        monthly_stats = pd.DataFrame(columns=['month', 'trades', 'pnl', 'win_rate'])
+
     metrics = {
         'initial_balance': initial_balance,
         'final_balance': balance,
         'total_trades': total_trades,
-        'win_rate_percent': win_rate,
-        'max_win_streak': max_win_streak,
-        'max_loss_streak': max_loss_streak,
         'max_drawdown': max_drawdown,
-        'pnl_total': balance - initial_balance
+        'profit_factor': profit_factor,
+        'pnl_total': balance - initial_balance,
     }
-    
-    return metrics, trades_df
+
+    return metrics, trades_df, equity_df, monthly_stats
 
 if __name__ == "__main__":
     # Test script
@@ -152,7 +202,7 @@ if __name__ == "__main__":
     init_bal = 1000
     bet = 10
     
-    stats, trade_log = run_backtest(df, init_bal, bet)
+    stats, trade_log, equity_df, monthly_stats = run_backtest(df, init_bal)
     
     print("\nBacktest Results:")
     for k, v in stats.items():
@@ -163,6 +213,6 @@ if __name__ == "__main__":
             
     print("\nLast 5 Trades:")
     if not trade_log.empty:
-        print(trade_log[['entry_time', 'signal', 'result', 'pnl', 'balance']].tail())
+        print(trade_log[['entry_time', 'side', 'result', 'pnl', 'balance']].tail())
     else:
         print("No trades executed.")

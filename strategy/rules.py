@@ -1,12 +1,82 @@
+import os
 import pandas as pd
 import numpy as np
 import logging
 from dataclasses import dataclass
 from typing import Optional, Dict
 from config import settings
+from ml.features import build_features
+from ml.model import load_model, predict_proba
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+_ML_MODEL = None
+_ML_MODEL_PATH = None
+
+
+def _get_ml_model():
+    global _ML_MODEL, _ML_MODEL_PATH
+    model_path = getattr(settings, 'ML_MODEL_PATH', os.path.join(settings.BASE_DIR, 'models', 'ethusdt_5m_lgbm.pkl'))
+    if _ML_MODEL is not None and _ML_MODEL_PATH == model_path:
+        return _ML_MODEL
+    if not os.path.exists(model_path):
+        logger.warning(f"ML model not found at {model_path}")
+        return None
+    try:
+        _ML_MODEL = load_model(model_path)
+        _ML_MODEL_PATH = model_path
+        return _ML_MODEL
+    except Exception as e:
+        logger.error(f"Failed to load ML model: {e}")
+        return None
+
+
+def _apply_ml_filter(df: pd.DataFrame, signal: int) -> int:
+    if signal == 0 or not getattr(settings, 'ML_ENABLED', False):
+        return signal
+
+    model = _get_ml_model()
+    if model is None:
+        logger.info("ML filter: model not available -> reject signal")
+        return 0
+
+    try:
+        features = build_features(df)
+        if features.size == 0:
+            logger.info("ML filter: no features -> reject signal")
+            return 0
+        last = features[-1]
+        if np.isnan(last).any():
+            logger.info("ML filter: NaN features -> reject signal")
+            return 0
+
+        p_up, p_flat, p_down = predict_proba(model, last)
+        logger.info(
+            f"ML probs: up={p_up:.3f} flat={p_flat:.3f} down={p_down:.3f} | base_signal={signal}"
+        )
+
+        if getattr(settings, 'ML_FLAT_FILTER', True) and p_flat > 0.55:
+            logger.info("ML filter: flat>0.55 -> reject signal")
+            return 0
+
+        if signal == 1:
+            if p_up > settings.ML_MIN_PROB and p_down < 0.25:
+                logger.info("ML filter: BUY allowed")
+                return 1
+            logger.info("ML filter: BUY rejected")
+            return 0
+        if signal == -1:
+            if p_down > settings.ML_MIN_PROB and p_up < 0.25:
+                logger.info("ML filter: SELL allowed")
+                return -1
+            logger.info("ML filter: SELL rejected")
+            return 0
+    except Exception as e:
+        logger.error(f"ML filter failed: {e}")
+        return 0
+
+    return 0
 
 @dataclass
 class PositionState:
@@ -163,24 +233,38 @@ strategy_instance = TrendFollowingStrategy()
 
 def apply_strategy(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Legacy wrapper to maintain compatibility with existing main.py structure 
-    if strictly needed, but the new strategy is Stateful and works per-step.
-    Vectorized backtesting this specific logic is harder with state (trailing stops/fixed stops).
-    
-    For now, we will NOT implement full vectorized apply_strategy for this specific logic 
-    unless requested for backtest. The user asked to "Add this to the strategy file".
-    
-    We can add a 'signal' column for ENTRY conditions at least.
+    EMA crossover strategy signal generator.
+    Uses ML probabilities (if present) as a filter on the latest candle.
     """
-    # Just mark potential entries for visualization/debug
     df['signal'] = 0
-    # Vectorized logic for ENTRY only (Stateful exit is hard to vectorise easily without loop)
-    # Trend
-    trend = df['close'] > df['SMA_200']
-    # Pullback
-    pullback = df['close'] < df['LowestLow_7']
-    
-    entries = trend & pullback
-    df.loc[entries, 'signal'] = 1 
-    
+
+    ema_fast_col = f'EMA_{settings.EMA_FAST}'
+    ema_slow_col = f'EMA_{settings.EMA_SLOW}'
+
+    if ema_fast_col not in df.columns or ema_slow_col not in df.columns:
+        return df
+
+    fast = df[ema_fast_col]
+    slow = df[ema_slow_col]
+    prev_fast = fast.shift(1)
+    prev_slow = slow.shift(1)
+
+    bull = (prev_fast <= prev_slow) & (fast > slow)
+    bear = (prev_fast >= prev_slow) & (fast < slow)
+
+    df.loc[bull, 'signal'] = 1
+    df.loc[bear, 'signal'] = -1
+
+    # ML filter (latest candle only)
+    last_idx = df.index[-1]
+    base_signal = int(df.at[last_idx, 'signal'])
+    if base_signal == 1:
+        logger.info("Strategy signal: BUY (EMA crossover)")
+    elif base_signal == -1:
+        logger.info("Strategy signal: SELL (EMA crossover)")
+    else:
+        logger.info("Strategy signal: NONE")
+
+    df.at[last_idx, 'signal'] = _apply_ml_filter(df, base_signal)
+
     return df

@@ -1,8 +1,81 @@
+import os
 from typing import Tuple, Optional, Dict
 import pandas as pd
 import logging
+import numpy as np
+from config import settings
+from ml.features import build_features
+from ml.model import load_model, predict_proba
 
 logger = logging.getLogger(__name__)
+
+_ML_MODEL = None
+_ML_MODEL_PATH = None
+
+
+def _get_ml_model():
+    global _ML_MODEL, _ML_MODEL_PATH
+    model_path = getattr(settings, 'ML_MODEL_PATH', os.path.join(settings.BASE_DIR, 'models', 'ethusdt_5m_lgbm.pkl'))
+    if _ML_MODEL is not None and _ML_MODEL_PATH == model_path:
+        return _ML_MODEL
+    if not os.path.exists(model_path):
+        logger.warning(f"ML model not found at {model_path}")
+        return None
+    try:
+        _ML_MODEL = load_model(model_path)
+        _ML_MODEL_PATH = model_path
+        return _ML_MODEL
+    except Exception as e:
+        logger.error(f"Failed to load ML model: {e}")
+        return None
+
+
+def _ml_allows(df: pd.DataFrame, base_signal: Optional[str]) -> Optional[str]:
+    if base_signal is None or not getattr(settings, 'ML_ENABLED', False):
+        return base_signal
+
+    model = _get_ml_model()
+    if model is None:
+        logger.info("ML filter: model not available -> reject signal")
+        return None
+
+    try:
+        features = build_features(df)
+        if features.size == 0:
+            logger.info("ML filter: no features -> reject signal")
+            return None
+        last = features[-1]
+        if np.isnan(last).any():
+            logger.info("ML filter: NaN features -> reject signal")
+            return None
+
+        p_up, p_flat, p_down = predict_proba(model, last)
+        logger.info(
+            f"ML probs: up={p_up:.3f} flat={p_flat:.3f} down={p_down:.3f} | base_signal={base_signal}"
+        )
+
+        if getattr(settings, 'ML_FLAT_FILTER', True) and p_flat > 0.55:
+            logger.info("ML filter: flat>0.55 -> reject signal")
+            return None
+
+        if base_signal == 'Buy':
+            if p_up > settings.ML_MIN_PROB and p_down < 0.25:
+                logger.info("ML filter: BUY allowed")
+                return 'Buy'
+            logger.info("ML filter: BUY rejected")
+            return None
+        if base_signal == 'Sell':
+            if p_down > settings.ML_MIN_PROB and p_up < 0.25:
+                logger.info("ML filter: SELL allowed")
+                return 'Sell'
+            logger.info("ML filter: SELL rejected")
+            return None
+    except Exception as e:
+        logger.error(f"ML filter failed: {e}")
+        return None
+
+    return None
+
 
 class Strategy:
     def __init__(self, ema_fast: int, ema_slow: int, sl_atr_multiplier: float, risk_reward_ratio: float):
@@ -36,11 +109,11 @@ class Strategy:
         # Check for Crossover
         # Bullish Crossover: Prev Fast <= Prev Slow AND Curr Fast > Curr Slow
         if prev_fast <= prev_slow and curr_fast > curr_slow:
-            return 'Buy'
+            return _ml_allows(df, 'Buy')
         
         # Bearish Crossover: Prev Fast >= Prev Slow AND Curr Fast < Curr Slow
         if prev_fast >= prev_slow and curr_fast < curr_slow:
-            return 'Sell'
+            return _ml_allows(df, 'Sell')
             
         return None
 

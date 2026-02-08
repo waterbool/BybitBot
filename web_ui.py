@@ -18,6 +18,7 @@ from backtest.backtester import run_backtest
 from data_fetch.bybit_client import fetch_historical_klines
 from indicators.ta_module import add_indicators
 from strategy.rules import apply_strategy
+from ml.model import add_ml_probabilities
 
 # Initialize Flask app
 app = Flask(__name__, static_folder='static', template_folder='static')
@@ -111,10 +112,22 @@ def run_backtest_api():
             ema_slow=settings.EMA_SLOW,
             atr_period=settings.ATR_PERIOD
         )
+        if getattr(settings, 'ML_ENABLED', False):
+            df = add_ml_probabilities(df)
         df = apply_strategy(df)
         
-        # Run backtest
-        metrics, trades_df = run_backtest(df, initial_balance, fixed_size, expiry_minutes, payout_rate)
+        # Run backtest (strategy + ML + TP/SL)
+        taker_fee_rate = float(params.get('taker_fee_rate', 0.00055))
+        slippage_rate = float(params.get('slippage_rate', 0.0002))
+        funding_rate_per_bar = float(params.get('funding_rate_per_bar', 0.0))
+
+        metrics, trades_df, equity_df, monthly_stats = run_backtest(
+            df,
+            initial_balance,
+            taker_fee_rate=taker_fee_rate,
+            slippage_rate=slippage_rate,
+            funding_rate_per_bar=funding_rate_per_bar,
+        )
         
         # Prepare chart data
         chart_data = {
@@ -129,6 +142,14 @@ def run_backtest_api():
         trades_list = []
         if trades_df is not None and not trades_df.empty:
             trades_list = trades_df.tail(50).to_dict('records')
+
+        equity_curve = []
+        if equity_df is not None and not equity_df.empty:
+            equity_curve = equity_df.tail(1000).to_dict('records')
+
+        monthly = []
+        if monthly_stats is not None and not monthly_stats.empty:
+            monthly = monthly_stats.to_dict('records')
         
         logger.info(f"Backtest completed: {metrics}")
         
@@ -136,7 +157,9 @@ def run_backtest_api():
             "success": True,
             "metrics": metrics,
             "chart_data": chart_data,
-            "trades": trades_list
+            "trades": trades_list,
+            "equity_curve": equity_curve,
+            "monthly_stats": monthly
         })
         
     except Exception as e:

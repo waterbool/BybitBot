@@ -13,6 +13,7 @@ from config import settings
 from data_fetch.bybit_client import fetch_historical_klines
 from indicators.ta_module import add_indicators
 from strategy.rules import apply_strategy
+from ml.model import add_ml_probabilities
 from risk.risk import RiskManager
 from pybit.unified_trading import HTTP
 
@@ -182,13 +183,15 @@ class BotController:
                         logger.error(str(e))
                         time.sleep(60)
                         continue
-                    lookback_mins = 200 * interval_mins
+                    ml_min_bars = int(getattr(settings, 'ML_MIN_TRAIN_SAMPLES', 300)) + int(getattr(settings, 'ML_HORIZON', 12)) + 50
+                    min_bars = max(200, ml_min_bars)
+                    lookback_mins = min_bars * interval_mins
                     start_ts = now - (lookback_mins * 60 * 1000)
                     
                     df = fetch_historical_klines(settings.BYBIT_SYMBOL, settings.BYBIT_INTERVAL, start_ts, now)
                     
-                    if len(df) < 50:
-                        logger.warning("Not enough data. Waiting...")
+                    if len(df) < min_bars:
+                        logger.warning(f"Not enough data ({len(df)}/{min_bars} bars). Waiting...")
                         time.sleep(10)
                         continue
                     
@@ -199,6 +202,9 @@ class BotController:
                         ema_slow=settings.EMA_SLOW,
                         atr_period=settings.ATR_PERIOD
                     )
+                    # ML probabilities (used as a filter in strategy rules)
+                    if getattr(settings, 'ML_ENABLED', False):
+                        df = add_ml_probabilities(df)
                     df = apply_strategy(df)
                     
                     # Check signal

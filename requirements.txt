@@ -7,3 +7,6 @@ flask-cors
 flask-socketio
 python-socketio
 schedule>=1.2.0
+lightgbm
+scikit-learn
+joblib

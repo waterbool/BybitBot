@@ -18,7 +18,7 @@ trading:
 
 # Strategy Settings
 strategy:
-  timeframe: "D" # Timeframe: "D" for Daily
+  timeframe: "5" # Timeframe: "5" for 5-minute candles
   ema_fast: 9
   ema_slow: 21
   atr_period: 20
@@ -31,9 +31,16 @@ strategy:
   volume_lookback: 20
   levels_lookback: 10
 
+ml:
+  enabled: true
+  model_path: "models/ethusdt_5m_lgbm.pkl"
+  timeframe: "5"
+  horizon_candles: 12
+  probability_threshold: 0.60
+  flat_filter: true
+
 
 # Risk Management
 risk:
   max_trades_per_day: 10
   max_daily_loss_usdt: 10.0
-

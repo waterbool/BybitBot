@@ -25,8 +25,8 @@ BYBIT_TESTNET = config.get("api", {}).get("testnet", True)
 
 BYBIT_SYMBOL = config.get("trading", {}).get("symbol", "ETHUSDT")
 BYBIT_CATEGORY = config.get("trading", {}).get("category", "linear")
-# Strategy requires 1D (Daily)
-BYBIT_INTERVAL = str(config.get("strategy", {}).get("timeframe", "D"))
+# Strategy requires 5m by default, can be overridden in config
+BYBIT_INTERVAL = str(config.get("strategy", {}).get("timeframe", "5"))
 
 # --- Trading Strategy Config ---
 INITIAL_BALANCE = 1000.0  # Optional simulation start balance
@@ -41,6 +41,19 @@ SL_ATR_MULTIPLIER = config.get("strategy", {}).get("sl_atr_multiplier", 2.0)
 VOLUME_MULTIPLIER = float(config.get("strategy", {}).get("volume_multiplier", 1.2))
 VOLUME_MA_PERIOD = int(config.get("strategy", {}).get("volume_ma_period", 20)) 
 LEVELS_LOOKBACK = config.get("strategy", {}).get("levels_lookback", 10)
+
+# --- ML Filter Settings ---
+ml_cfg = config.get("ml", {})
+ML_ENABLED = bool(ml_cfg.get("enabled", True))
+ML_HORIZON = int(ml_cfg.get("horizon_candles", 12))
+ML_MIN_PROB = float(ml_cfg.get("probability_threshold", 0.60))
+ML_FLAT_FILTER = bool(ml_cfg.get("flat_filter", True))
+ML_MODEL_PATH = str(ml_cfg.get("model_path", BASE_DIR / "models" / "ethusdt_5m_lgbm.pkl"))
+
+# Backward compatibility (if old strategy.* ML keys exist)
+ML_FLAT_THRESHOLD = float(config.get("strategy", {}).get("ml_flat_threshold", 0.002))
+ML_MIN_TRAIN_SAMPLES = int(config.get("strategy", {}).get("ml_min_train_samples", 300))
+ML_TRAIN_WINDOW = int(config.get("strategy", {}).get("ml_train_window", 2000))
 
 # Aliases for compatibility
 VOLUME_LOOKBACK = VOLUME_MA_PERIOD
