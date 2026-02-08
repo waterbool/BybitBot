@@ -44,6 +44,7 @@ def add_indicators(df: pd.DataFrame,
     # EMA
     df[f'EMA_{ema_fast}'] = ta.trend.EMAIndicator(close=df['close'], window=ema_fast).ema_indicator()
     df[f'EMA_{ema_slow}'] = ta.trend.EMAIndicator(close=df['close'], window=ema_slow).ema_indicator()
+    df['EMA_200'] = ta.trend.EMAIndicator(close=df['close'], window=200).ema_indicator()
     
     # ATR
     # ta library ATR requires high, low, close
@@ -53,6 +54,13 @@ def add_indicators(df: pd.DataFrame,
         close=df['close'], 
         window=atr_period
     ).average_true_range()
+    if atr_period != 14:
+        df['ATR_14'] = ta.volatility.AverageTrueRange(
+            high=df['high'],
+            low=df['low'],
+            close=df['close'],
+            window=14
+        ).average_true_range()
     
     # Volume SMA (Average Volume)
     df['Volume_SMA'] = df['volume'].rolling(window=20).mean() # Fixed 20 or configurable? Using 20 as standard.

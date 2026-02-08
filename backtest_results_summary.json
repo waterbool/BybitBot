@@ -1,0 +1,50 @@
+[
+  {
+    "period_days": 30,
+    "ml_enabled": false,
+    "final_balance": 999.0733010954459,
+    "total_trades": 300,
+    "max_drawdown": -1.0063308760963992,
+    "profit_factor": 0.49353470057676285,
+    "gross_pnl": 0.033103282405989254,
+    "net_pnl": -0.9266989045540868,
+    "total_fees": 0.7198516392263387,
+    "total_slippage_cost_estimate": 0.23995054773288607
+  },
+  {
+    "period_days": 90,
+    "ml_enabled": false,
+    "final_balance": 996.7155621299427,
+    "total_trades": 948,
+    "max_drawdown": -3.3786277435463035,
+    "profit_factor": 0.41664348138478985,
+    "gross_pnl": -0.2498739193120356,
+    "net_pnl": -3.2844378700573316,
+    "total_fees": 2.275022728531886,
+    "total_slippage_cost_estimate": 0.7583408995155939
+  },
+  {
+    "period_days": 30,
+    "ml_enabled": true,
+    "final_balance": 999.8732595762034,
+    "total_trades": 169,
+    "max_drawdown": -0.45451912017915674,
+    "profit_factor": 0.8377629759753153,
+    "gross_pnl": 0.4152834835999938,
+    "net_pnl": -0.12674042379660477,
+    "total_fees": 0.4056176760665588,
+    "total_slippage_cost_estimate": 0.13520590863351026
+  },
+  {
+    "period_days": 90,
+    "ml_enabled": true,
+    "final_balance": 998.6304920489139,
+    "total_trades": 538,
+    "max_drawdown": -1.687231166462766,
+    "profit_factor": 0.533026740201067,
+    "gross_pnl": 0.35362932882397846,
+    "net_pnl": -1.3695079510861206,
+    "total_fees": 1.2914527073019242,
+    "total_slippage_cost_estimate": 0.4304842499124327
+  }
+]

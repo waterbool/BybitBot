@@ -78,6 +78,97 @@ def _apply_ml_filter(df: pd.DataFrame, signal: int) -> int:
 
     return 0
 
+
+def _apply_market_filters(df: pd.DataFrame, signal: int) -> int:
+    """
+    Apply market regime filters before ML:
+    - Volatility filter via ATR(14) percent
+    - Higher timeframe trend filter via EMA200
+    """
+    if signal == 0:
+        return 0
+
+    row = df.iloc[-1]
+    close = row.get('close')
+    if close is None or pd.isna(close) or close == 0:
+        logger.info("Market filter: invalid close -> reject signal")
+        return 0
+
+    atr = row.get('ATR_14')
+    if atr is None or pd.isna(atr):
+        atr = row.get(f'ATR_{settings.ATR_PERIOD}')
+    if atr is None or pd.isna(atr):
+        logger.info("Market filter: ATR missing -> reject signal")
+        return 0
+
+    atr_percent = float(atr) / float(close)
+    if atr_percent < settings.MIN_ATR_THRESHOLD:
+        logger.info(
+            f"Market filter: ATR% {atr_percent:.6f} < {settings.MIN_ATR_THRESHOLD:.6f} -> reject signal"
+        )
+        return 0
+
+    ema200 = row.get('EMA_200')
+    if ema200 is None or pd.isna(ema200):
+        logger.info("Market filter: EMA200 missing -> reject signal")
+        return 0
+
+    if signal == 1 and close <= ema200:
+        logger.info("Market filter: BUY requires close > EMA200 -> reject signal")
+        return 0
+    if signal == -1 and close >= ema200:
+        logger.info("Market filter: SELL requires close < EMA200 -> reject signal")
+        return 0
+
+    return signal
+
+
+def _apply_impulse_filter(df: pd.DataFrame, signal: int) -> int:
+    if signal == 0:
+        return 0
+    if len(df) < 2:
+        return 0
+    close = df['close'].iloc[-1]
+    prev_close = df['close'].iloc[-2]
+    if pd.isna(close) or pd.isna(prev_close) or prev_close == 0:
+        logger.info("Impulse filter: invalid close -> reject signal")
+        return 0
+    ret1 = abs((float(close) / float(prev_close)) - 1.0)
+    if ret1 <= settings.IMPULSE_THRESHOLD:
+        logger.info(f"Impulse filter: |return(1)| {ret1:.6f} <= {settings.IMPULSE_THRESHOLD:.6f} -> reject signal")
+        return 0
+    return signal
+
+
+def _apply_cooldown_filter(df: pd.DataFrame, signal: int) -> int:
+    if signal == 0 or settings.COOLDOWN_CANDLES <= 0:
+        return signal
+    if 'signal' not in df.columns or len(df) < 2:
+        return signal
+
+    prev_signals = df['signal'].iloc[:-1]
+    non_zero = prev_signals[prev_signals != 0]
+    if non_zero.empty:
+        return signal
+
+    last_idx = non_zero.index[-1]
+    try:
+        last_pos = df.index.get_loc(last_idx)
+    except Exception:
+        return signal
+
+    candles_since = (len(df) - 1) - int(last_pos)
+    last_side = int(non_zero.loc[last_idx])
+
+    if signal == 1 and last_side == -1 and candles_since <= settings.COOLDOWN_CANDLES:
+        logger.info(f"Cooldown filter: {candles_since} candles since SELL <= {settings.COOLDOWN_CANDLES} -> reject signal")
+        return 0
+    if signal == -1 and last_side == 1 and candles_since <= settings.COOLDOWN_CANDLES:
+        logger.info(f"Cooldown filter: {candles_since} candles since BUY <= {settings.COOLDOWN_CANDLES} -> reject signal")
+        return 0
+
+    return signal
+
 @dataclass
 class PositionState:
     is_open: bool = False
@@ -137,6 +228,20 @@ class TrendFollowingStrategy:
 
         state = self.get_position_state(symbol)
 
+        # --- MARKET REGIME FILTERS (pre-entry) ---
+        atr14 = row.get('ATR_14')
+        if atr14 is None or pd.isna(atr14):
+            atr14 = atr
+        if atr14 is None or pd.isna(atr14) or close == 0:
+            return SignalResult("HOLD", "ATR missing/invalid")
+        atr_percent = float(atr14) / float(close)
+        if atr_percent < settings.MIN_ATR_THRESHOLD:
+            return SignalResult("HOLD", f"Low volatility (ATR% {atr_percent:.6f})")
+
+        ema200 = row.get('EMA_200')
+        if ema200 is None or pd.isna(ema200):
+            return SignalResult("HOLD", "EMA200 missing")
+
         # --- UPDATE INDICATORS LOGIC ---
         # (Implicitly done by receiving fresh df with indicators calculated)
 
@@ -153,7 +258,7 @@ class TrendFollowingStrategy:
             # (false breakout down against uptrend)."
             pullback_condition = close < lowest_low_7
             
-            if trend_up and pullback_condition:
+            if trend_up and close > ema200 and pullback_condition:
                 # GENERATE BUY SIGNAL
                 # Calculate Risk
                 entry_price = close # Actually we enter on Open next, but we estimate with Close or next Open. 
@@ -265,6 +370,9 @@ def apply_strategy(df: pd.DataFrame) -> pd.DataFrame:
     else:
         logger.info("Strategy signal: NONE")
 
-    df.at[last_idx, 'signal'] = _apply_ml_filter(df, base_signal)
+    impulse_signal = _apply_impulse_filter(df, base_signal)
+    cooldown_signal = _apply_cooldown_filter(df, impulse_signal)
+    market_signal = _apply_market_filters(df, cooldown_signal)
+    df.at[last_idx, 'signal'] = _apply_ml_filter(df, market_signal)
 
     return df

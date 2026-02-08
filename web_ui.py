@@ -117,15 +117,25 @@ def run_backtest_api():
         df = apply_strategy(df)
         
         # Run backtest (strategy + ML + TP/SL)
-        taker_fee_rate = float(params.get('taker_fee_rate', 0.00055))
-        slippage_rate = float(params.get('slippage_rate', 0.0002))
+        taker_fee_rate = float(params.get('taker_fee_rate', settings.BACKTEST_TAKER_FEE))
+        maker_fee_rate = float(params.get('maker_fee_rate', settings.BACKTEST_MAKER_FEE))
+        use_taker = bool(params.get('use_taker', settings.BACKTEST_USE_TAKER))
+        slippage_bps = float(params.get('slippage_bps', settings.BACKTEST_SLIPPAGE_BPS))
+        slippage_rate = params.get('slippage_rate', None)
+        if slippage_rate is not None:
+            slippage_rate = float(slippage_rate)
         funding_rate_per_bar = float(params.get('funding_rate_per_bar', 0.0))
+        execution_delay_candles = int(params.get('execution_delay_candles', settings.BACKTEST_EXECUTION_DELAY_CANDLES))
 
         metrics, trades_df, equity_df, monthly_stats = run_backtest(
             df,
             initial_balance,
             taker_fee_rate=taker_fee_rate,
+            maker_fee_rate=maker_fee_rate,
+            use_taker=use_taker,
+            slippage_bps=slippage_bps,
             slippage_rate=slippage_rate,
+            execution_delay_candles=execution_delay_candles,
             funding_rate_per_bar=funding_rate_per_bar,
         )
         

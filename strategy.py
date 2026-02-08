@@ -77,12 +77,53 @@ def _ml_allows(df: pd.DataFrame, base_signal: Optional[str]) -> Optional[str]:
     return None
 
 
+def _market_allows(df: pd.DataFrame, base_signal: Optional[str]) -> Optional[str]:
+    if base_signal is None:
+        return None
+
+    row = df.iloc[-1]
+    close = row.get('close')
+    if close is None or pd.isna(close) or close == 0:
+        logger.info("Market filter: invalid close -> reject signal")
+        return None
+
+    atr = row.get('ATR_14')
+    if atr is None or pd.isna(atr):
+        atr = row.get(f'ATR_{settings.ATR_PERIOD}')
+    if atr is None or pd.isna(atr):
+        logger.info("Market filter: ATR missing -> reject signal")
+        return None
+
+    atr_percent = float(atr) / float(close)
+    if atr_percent < settings.MIN_ATR_THRESHOLD:
+        logger.info(
+            f"Market filter: ATR% {atr_percent:.6f} < {settings.MIN_ATR_THRESHOLD:.6f} -> reject signal"
+        )
+        return None
+
+    ema200 = row.get('EMA_200')
+    if ema200 is None or pd.isna(ema200):
+        logger.info("Market filter: EMA200 missing -> reject signal")
+        return None
+
+    if base_signal == 'Buy' and close <= ema200:
+        logger.info("Market filter: BUY requires close > EMA200 -> reject signal")
+        return None
+    if base_signal == 'Sell' and close >= ema200:
+        logger.info("Market filter: SELL requires close < EMA200 -> reject signal")
+        return None
+
+    return base_signal
+
+
 class Strategy:
     def __init__(self, ema_fast: int, ema_slow: int, sl_atr_multiplier: float, risk_reward_ratio: float):
         self.ema_fast = ema_fast
         self.ema_slow = ema_slow
         self.sl_atr_multiplier = sl_atr_multiplier
         self.risk_reward_ratio = risk_reward_ratio
+        self.last_trade_idx: Optional[int] = None
+        self.last_trade_side: Optional[str] = None
 
     def check_signal(self, df: pd.DataFrame) -> Optional[str]:
         """
@@ -106,14 +147,51 @@ class Strategy:
             logger.error(f"Missing indicator columns in DataFrame: {e}")
             return None
 
+        curr_close = df['close'].iloc[-1]
+        prev_close = df['close'].iloc[-2]
+
         # Check for Crossover
         # Bullish Crossover: Prev Fast <= Prev Slow AND Curr Fast > Curr Slow
         if prev_fast <= prev_slow and curr_fast > curr_slow:
-            return _ml_allows(df, 'Buy')
+            if prev_close == 0 or pd.isna(prev_close):
+                return None
+            ret1 = abs((curr_close / prev_close) - 1.0)
+            if ret1 <= settings.IMPULSE_THRESHOLD:
+                logger.info(f"Impulse filter: |return(1)| {ret1:.6f} <= {settings.IMPULSE_THRESHOLD:.6f}")
+                return None
+
+            if self.last_trade_idx is not None and self.last_trade_side == 'Sell':
+                candles_since = (len(df) - 1) - self.last_trade_idx
+                if candles_since <= settings.COOLDOWN_CANDLES:
+                    logger.info(f"Cooldown filter: {candles_since} candles since SELL <= {settings.COOLDOWN_CANDLES}")
+                    return None
+
+            allowed = _ml_allows(df, _market_allows(df, 'Buy'))
+            if allowed == 'Buy':
+                self.last_trade_idx = len(df) - 1
+                self.last_trade_side = 'Buy'
+            return allowed
         
         # Bearish Crossover: Prev Fast >= Prev Slow AND Curr Fast < Curr Slow
         if prev_fast >= prev_slow and curr_fast < curr_slow:
-            return _ml_allows(df, 'Sell')
+            if prev_close == 0 or pd.isna(prev_close):
+                return None
+            ret1 = abs((curr_close / prev_close) - 1.0)
+            if ret1 <= settings.IMPULSE_THRESHOLD:
+                logger.info(f"Impulse filter: |return(1)| {ret1:.6f} <= {settings.IMPULSE_THRESHOLD:.6f}")
+                return None
+
+            if self.last_trade_idx is not None and self.last_trade_side == 'Buy':
+                candles_since = (len(df) - 1) - self.last_trade_idx
+                if candles_since <= settings.COOLDOWN_CANDLES:
+                    logger.info(f"Cooldown filter: {candles_since} candles since BUY <= {settings.COOLDOWN_CANDLES}")
+                    return None
+
+            allowed = _ml_allows(df, _market_allows(df, 'Sell'))
+            if allowed == 'Sell':
+                self.last_trade_idx = len(df) - 1
+                self.last_trade_side = 'Sell'
+            return allowed
             
         return None
 

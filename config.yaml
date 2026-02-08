@@ -30,6 +30,14 @@ strategy:
   volume_multiplier: 1.2
   volume_lookback: 20
   levels_lookback: 10
+  min_atr_threshold: 0.0015
+  impulse_threshold: 0.002
+  cooldown_candles: 4
+  tp1_atr_mult: 1.0
+  tp1_partial_pct: 0.5
+  trail_atr_mult: 1.5
+  trail_activate_atr: 1.0
+  time_stop_candles: 24
 
 ml:
   enabled: true
@@ -44,3 +52,11 @@ ml:
 risk:
   max_trades_per_day: 10
   max_daily_loss_usdt: 10.0
+
+# Backtest Settings
+backtest:
+  taker_fee: 0.0006
+  maker_fee: 0.0002
+  use_taker: true
+  slippage_bps: 2
+  execution_delay_candles: 1

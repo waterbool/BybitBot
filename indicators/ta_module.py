@@ -30,6 +30,7 @@ def add_indicators(df: pd.DataFrame,
     # 1. EMA
     df[f'EMA_{ema_fast}'] = _calculate_ema(df['close'], window=ema_fast)
     df[f'EMA_{ema_slow}'] = _calculate_ema(df['close'], window=ema_slow)
+    df['EMA_200'] = _calculate_ema(df['close'], window=200)
     
     # 2. RSI
     df[f'RSI_{rsi_period}'] = _calculate_rsi(df['close'], window=rsi_period)
@@ -45,6 +46,10 @@ def add_indicators(df: pd.DataFrame,
     df[f'ATR_{atr_period}'] = _calculate_atr(
         df['high'], df['low'], df['close'], window=atr_period
     )
+    if atr_period != 14:
+        df['ATR_14'] = _calculate_atr(
+            df['high'], df['low'], df['close'], window=14
+        )
 
     
     # 5. Volume SMA

@@ -41,6 +41,14 @@ SL_ATR_MULTIPLIER = config.get("strategy", {}).get("sl_atr_multiplier", 2.0)
 VOLUME_MULTIPLIER = float(config.get("strategy", {}).get("volume_multiplier", 1.2))
 VOLUME_MA_PERIOD = int(config.get("strategy", {}).get("volume_ma_period", 20)) 
 LEVELS_LOOKBACK = config.get("strategy", {}).get("levels_lookback", 10)
+MIN_ATR_THRESHOLD = float(config.get("strategy", {}).get("min_atr_threshold", 0.0015))
+IMPULSE_THRESHOLD = float(config.get("strategy", {}).get("impulse_threshold", 0.002))
+COOLDOWN_CANDLES = int(config.get("strategy", {}).get("cooldown_candles", 4))
+TP1_ATR_MULT = float(config.get("strategy", {}).get("tp1_atr_mult", 1.0))
+TP1_PARTIAL_PCT = float(config.get("strategy", {}).get("tp1_partial_pct", 0.5))
+TRAIL_ATR_MULT = float(config.get("strategy", {}).get("trail_atr_mult", 1.5))
+TRAIL_ACTIVATE_ATR = float(config.get("strategy", {}).get("trail_activate_atr", 1.0))
+TIME_STOP_CANDLES = int(config.get("strategy", {}).get("time_stop_candles", 24))
 
 # --- ML Filter Settings ---
 ml_cfg = config.get("ml", {})
@@ -74,6 +82,14 @@ DRY_RUN = config.get("trading", {}).get("dry_run", True)
 # --- Risk Management ---
 MAX_TRADES_PER_DAY = config.get("risk", {}).get("max_trades_per_day", 10)
 MAX_DAILY_LOSS_USDT = config.get("risk", {}).get("max_daily_loss_usdt", 10.0)
+
+# --- Backtest Settings ---
+backtest_cfg = config.get("backtest", {})
+BACKTEST_TAKER_FEE = float(backtest_cfg.get("taker_fee", 0.0006))
+BACKTEST_MAKER_FEE = float(backtest_cfg.get("maker_fee", 0.0002))
+BACKTEST_USE_TAKER = bool(backtest_cfg.get("use_taker", True))
+BACKTEST_SLIPPAGE_BPS = float(backtest_cfg.get("slippage_bps", 2))
+BACKTEST_EXECUTION_DELAY_CANDLES = int(backtest_cfg.get("execution_delay_candles", 1))
 
 
 # --- Binarium Config (Legacy/Hybrid) ---

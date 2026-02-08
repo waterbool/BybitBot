@@ -16,7 +16,9 @@ def test_strategy_logic():
         'volume': np.full(50, 1000.0),
         f'EMA_{settings.EMA_FAST}': np.full(50, 100.0),
         f'EMA_{settings.EMA_SLOW}': np.full(50, 100.0),
-        f'ATR_{settings.ATR_PERIOD}': np.full(50, 2.0)
+        f'ATR_{settings.ATR_PERIOD}': np.full(50, 2.0),
+        'ATR_14': np.full(50, 2.0),
+        'EMA_200': np.full(50, 100.0)
     }
     df = pd.DataFrame(data, index=dates)
     

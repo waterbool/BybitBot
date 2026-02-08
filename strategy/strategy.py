@@ -57,12 +57,37 @@ def analyze_market(df: pd.DataFrame) -> Dict[str, Union[str, float, None]]:
     ema_fast = current[f'EMA_{settings.EMA_FAST}']
     ema_slow = current[f'EMA_{settings.EMA_SLOW}']
     close = current['close']
+    ema200 = current.get('EMA_200')
     
     is_uptrend = (close > ema_fast) and (close > ema_slow) and (ema_fast > ema_slow)
     is_downtrend = (close < ema_fast) and (close < ema_slow) and (ema_fast < ema_slow)
     
     if not is_uptrend and not is_downtrend:
         signal_result["reason"] = "No Trend"
+        return signal_result
+
+    # 1.1 Market Regime Filters (Volatility + EMA200)
+    atr = current.get('ATR_14')
+    if atr is None or pd.isna(atr):
+        atr = current.get(f'ATR_{settings.ATR_PERIOD}')
+    if atr is None or pd.isna(atr) or close == 0:
+        signal_result["reason"] = "ATR Missing/Invalid"
+        return signal_result
+
+    atr_percent = float(atr) / float(close)
+    if atr_percent < settings.MIN_ATR_THRESHOLD:
+        signal_result["reason"] = f"Low Volatility (ATR% {atr_percent:.6f})"
+        return signal_result
+
+    if ema200 is None or pd.isna(ema200):
+        signal_result["reason"] = "EMA200 Missing"
+        return signal_result
+
+    if is_uptrend and close <= ema200:
+        signal_result["reason"] = "Above trend filter failed (Close <= EMA200)"
+        return signal_result
+    if is_downtrend and close >= ema200:
+        signal_result["reason"] = "Below trend filter failed (Close >= EMA200)"
         return signal_result
 
     # 2. Volume Filter

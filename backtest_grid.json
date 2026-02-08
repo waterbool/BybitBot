@@ -1,0 +1,1833 @@
+{
+  "meta": {
+    "symbol": "ETHUSDT",
+    "interval": "5",
+    "windows": [
+      "30d",
+      "90d",
+      "90d_seg1",
+      "90d_seg2",
+      "90d_seg3"
+    ],
+    "impulse_thresholds": [
+      0.0008,
+      0.001,
+      0.0012,
+      0.0015,
+      0.002
+    ],
+    "min_atr_thresholds": [
+      0.0008,
+      0.001,
+      0.0012,
+      0.0015,
+      0.002
+    ],
+    "ml_variants": [
+      "ml_off",
+      "ml_on"
+    ]
+  },
+  "grid": {
+    "impulse_0.0008_minatr_0.0008": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.1478848844840286,
+          "profit_factor": 0.7511125373283181,
+          "max_drawdown": -0.2870716970293188,
+          "total_trades": 96
+        },
+        "ml_on": {
+          "net_pnl": 0.01234732221359991,
+          "profit_factor": 1.039460483853283,
+          "max_drawdown": -0.1727122439399409,
+          "total_trades": 60
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -1.0043091292249073,
+          "profit_factor": 0.5002469043427238,
+          "max_drawdown": -1.157952370517819,
+          "total_trades": 302
+        },
+        "ml_on": {
+          "net_pnl": -0.40799931180674776,
+          "profit_factor": 0.6122908832264944,
+          "max_drawdown": -0.5930588779602886,
+          "total_trades": 168
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.4363122776369437,
+          "profit_factor": 0.4952323903325839,
+          "max_drawdown": -0.45544018441614753,
+          "total_trades": 120
+        },
+        "ml_on": {
+          "net_pnl": -0.1613745449291173,
+          "profit_factor": 0.5954731595514434,
+          "max_drawdown": -0.1613745449291173,
+          "total_trades": 58
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.4513939865039447,
+          "profit_factor": 0.21113856873103598,
+          "max_drawdown": -0.4525019447773957,
+          "total_trades": 86
+        },
+        "ml_on": {
+          "net_pnl": -0.24787973441937083,
+          "profit_factor": 0.24519235948168722,
+          "max_drawdown": -0.2540899165862811,
+          "total_trades": 48
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.13917457288664536,
+          "profit_factor": 0.7622871250707708,
+          "max_drawdown": -0.2771001838666507,
+          "total_trades": 95
+        },
+        "ml_on": {
+          "net_pnl": 0.01234732221359991,
+          "profit_factor": 1.039460483853283,
+          "max_drawdown": -0.1727122439399409,
+          "total_trades": 60
+        }
+      }
+    },
+    "impulse_0.0008_minatr_0.0010": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.1331377413412156,
+          "profit_factor": 0.770081380858949,
+          "max_drawdown": -0.2723245538865058,
+          "total_trades": 93
+        },
+        "ml_on": {
+          "net_pnl": 0.01234732221359991,
+          "profit_factor": 1.039460483853283,
+          "max_drawdown": -0.1727122439399409,
+          "total_trades": 60
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.9828219421854101,
+          "profit_factor": 0.5054758768149464,
+          "max_drawdown": -1.1364651834783217,
+          "total_trades": 295
+        },
+        "ml_on": {
+          "net_pnl": -0.4009173028131272,
+          "profit_factor": 0.6164394057260163,
+          "max_drawdown": -0.585976868966668,
+          "total_trades": 165
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.4363122776369437,
+          "profit_factor": 0.4952323903325839,
+          "max_drawdown": -0.45544018441614753,
+          "total_trades": 120
+        },
+        "ml_on": {
+          "net_pnl": -0.1613745449291173,
+          "profit_factor": 0.5954731595514434,
+          "max_drawdown": -0.1613745449291173,
+          "total_trades": 58
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.44465394260726043,
+          "profit_factor": 0.21317938290538205,
+          "max_drawdown": -0.44576190088071144,
+          "total_trades": 82
+        },
+        "ml_on": {
+          "net_pnl": -0.2407977254257503,
+          "profit_factor": 0.25059650136676326,
+          "max_drawdown": -0.24700790759266056,
+          "total_trades": 45
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.12442742974383236,
+          "profit_factor": 0.7818418751760193,
+          "max_drawdown": -0.2623530407238377,
+          "total_trades": 92
+        },
+        "ml_on": {
+          "net_pnl": 0.01234732221359991,
+          "profit_factor": 1.039460483853283,
+          "max_drawdown": -0.1727122439399409,
+          "total_trades": 60
+        }
+      }
+    },
+    "impulse_0.0008_minatr_0.0012": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.11910934664331307,
+          "profit_factor": 0.7895337183676887,
+          "max_drawdown": -0.25829615918860327,
+          "total_trades": 89
+        },
+        "ml_on": {
+          "net_pnl": 0.01820801282042339,
+          "profit_factor": 1.0597006751167468,
+          "max_drawdown": -0.1668515533331174,
+          "total_trades": 57
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.9155637460120261,
+          "profit_factor": 0.5224926715182806,
+          "max_drawdown": -1.0692069873049377,
+          "total_trades": 280
+        },
+        "ml_on": {
+          "net_pnl": -0.3600904591270364,
+          "profit_factor": 0.6403299028132553,
+          "max_drawdown": -0.5451500252805772,
+          "total_trades": 156
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.42279703192559737,
+          "profit_factor": 0.5023960009200489,
+          "max_drawdown": -0.4419249387048012,
+          "total_trades": 117
+        },
+        "ml_on": {
+          "net_pnl": -0.14785929921777097,
+          "profit_factor": 0.6151551018200346,
+          "max_drawdown": -0.14785929921777097,
+          "total_trades": 55
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.40493938684312525,
+          "profit_factor": 0.2256635705257822,
+          "max_drawdown": -0.40604734511657625,
+          "total_trades": 74
+        },
+        "ml_on": {
+          "net_pnl": -0.2193468180578293,
+          "profit_factor": 0.26852277981174977,
+          "max_drawdown": -0.22555700022473957,
+          "total_trades": 42
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.11039903504592985,
+          "profit_factor": 0.8018754845271311,
+          "max_drawdown": -0.24832464602593518,
+          "total_trades": 88
+        },
+        "ml_on": {
+          "net_pnl": 0.01820801282042339,
+          "profit_factor": 1.0597006751167468,
+          "max_drawdown": -0.1668515533331174,
+          "total_trades": 57
+        }
+      }
+    },
+    "impulse_0.0008_minatr_0.0015": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.06485978193654773,
+          "profit_factor": 0.8718910203256393,
+          "max_drawdown": -0.20278539291655306,
+          "total_trades": 78
+        },
+        "ml_on": {
+          "net_pnl": 0.046916840126982606,
+          "profit_factor": 1.1731987895307399,
+          "max_drawdown": -0.14273094884254078,
+          "total_trades": 49
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.8111937501549846,
+          "profit_factor": 0.5485884388879607,
+          "max_drawdown": -0.9648369914478963,
+          "total_trades": 253
+        },
+        "ml_on": {
+          "net_pnl": -0.2849493735228634,
+          "profit_factor": 0.6888783712623671,
+          "max_drawdown": -0.47511090152931956,
+          "total_trades": 138
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.4079915074588598,
+          "profit_factor": 0.509277394260183,
+          "max_drawdown": -0.42595543413551695,
+          "total_trades": 112
+        },
+        "ml_on": {
+          "net_pnl": -0.1303403781828365,
+          "profit_factor": 0.6438290118037059,
+          "max_drawdown": -0.13544234003575184,
+          "total_trades": 52
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.359899363054069,
+          "profit_factor": 0.2371377336786585,
+          "max_drawdown": -0.36565000520204194,
+          "total_trades": 63
+        },
+        "ml_on": {
+          "net_pnl": -0.1894186752870155,
+          "profit_factor": 0.29040024139334797,
+          "max_drawdown": -0.20185460548657375,
+          "total_trades": 36
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.06485978193654773,
+          "profit_factor": 0.8718910203256393,
+          "max_drawdown": -0.20278539291655306,
+          "total_trades": 78
+        },
+        "ml_on": {
+          "net_pnl": 0.046916840126982606,
+          "profit_factor": 1.1731987895307399,
+          "max_drawdown": -0.14273094884254078,
+          "total_trades": 49
+        }
+      }
+    },
+    "impulse_0.0008_minatr_0.0020": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": 0.01037417635507154,
+          "profit_factor": 1.0253430306299745,
+          "max_drawdown": -0.1275514346249338,
+          "total_trades": 59
+        },
+        "ml_on": {
+          "net_pnl": 0.09086089689401433,
+          "profit_factor": 1.4234838665775746,
+          "max_drawdown": -0.12059583271752672,
+          "total_trades": 38
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.5796343386654144,
+          "profit_factor": 0.6038666479364139,
+          "max_drawdown": -0.733277579958326,
+          "total_trades": 178
+        },
+        "ml_on": {
+          "net_pnl": -0.16278036038829669,
+          "profit_factor": 0.779389758659716,
+          "max_drawdown": -0.3500647454703767,
+          "total_trades": 98
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.3829603549721696,
+          "profit_factor": 0.4973363055440026,
+          "max_drawdown": -0.3986779852850759,
+          "total_trades": 88
+        },
+        "ml_on": {
+          "net_pnl": -0.10644992307993562,
+          "profit_factor": 0.6726903727345493,
+          "max_drawdown": -0.10867474200847482,
+          "total_trades": 41
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.2286050623428082,
+          "profit_factor": 0.24917754390871658,
+          "max_drawdown": -0.23148404444054904,
+          "total_trades": 31
+        },
+        "ml_on": {
+          "net_pnl": -0.13508417402238138,
+          "profit_factor": 0.2736399860106917,
+          "max_drawdown": -0.14401470168513697,
+          "total_trades": 18
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": 0.01037417635507154,
+          "profit_factor": 1.0253430306299745,
+          "max_drawdown": -0.1275514346249338,
+          "total_trades": 59
+        },
+        "ml_on": {
+          "net_pnl": 0.09086089689401433,
+          "profit_factor": 1.4234838665775746,
+          "max_drawdown": -0.12059583271752672,
+          "total_trades": 38
+        }
+      }
+    },
+    "impulse_0.0010_minatr_0.0008": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.15431909431379154,
+          "profit_factor": 0.7251995268353487,
+          "max_drawdown": -0.26978161714464477,
+          "total_trades": 83
+        },
+        "ml_on": {
+          "net_pnl": -0.015159153173499362,
+          "profit_factor": 0.9502959665301859,
+          "max_drawdown": -0.18087216182254906,
+          "total_trades": 52
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.8692252312141591,
+          "profit_factor": 0.5178716797973487,
+          "max_drawdown": -1.0004053843579186,
+          "total_trades": 261
+        },
+        "ml_on": {
+          "net_pnl": -0.32168473575302414,
+          "profit_factor": 0.6509643723912636,
+          "max_drawdown": -0.5133411804121124,
+          "total_trades": 145
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.3769603289049428,
+          "profit_factor": 0.5157718260599062,
+          "max_drawdown": -0.39608823568414664,
+          "total_trades": 107
+        },
+        "ml_on": {
+          "net_pnl": -0.1008759235570551,
+          "profit_factor": 0.6995693002266871,
+          "max_drawdown": -0.12681935956709367,
+          "total_trades": 52
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.35950271028991665,
+          "profit_factor": 0.24363339244440066,
+          "max_drawdown": -0.36061066856336765,
+          "total_trades": 71
+        },
+        "ml_on": {
+          "net_pnl": -0.19354249884247565,
+          "profit_factor": 0.27990110068838836,
+          "max_drawdown": -0.19975268100938592,
+          "total_trades": 40
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.15431909431379154,
+          "profit_factor": 0.7251995268353487,
+          "max_drawdown": -0.26978161714464477,
+          "total_trades": 83
+        },
+        "ml_on": {
+          "net_pnl": -0.015159153173499362,
+          "profit_factor": 0.9502959665301859,
+          "max_drawdown": -0.18087216182254906,
+          "total_trades": 52
+        }
+      }
+    },
+    "impulse_0.0010_minatr_0.0010": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.13919998529433997,
+          "profit_factor": 0.745264303447321,
+          "max_drawdown": -0.2546625081251932,
+          "total_trades": 81
+        },
+        "ml_on": {
+          "net_pnl": -0.015159153173499362,
+          "profit_factor": 0.9502959665301859,
+          "max_drawdown": -0.18087216182254906,
+          "total_trades": 52
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.8481386809127116,
+          "profit_factor": 0.5239089951930436,
+          "max_drawdown": -0.9793188340564711,
+          "total_trades": 256
+        },
+        "ml_on": {
+          "net_pnl": -0.31537532937409196,
+          "profit_factor": 0.655451499454337,
+          "max_drawdown": -0.5070317740331802,
+          "total_trades": 143
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.3769603289049428,
+          "profit_factor": 0.5157718260599062,
+          "max_drawdown": -0.39608823568414664,
+          "total_trades": 107
+        },
+        "ml_on": {
+          "net_pnl": -0.1008759235570551,
+          "profit_factor": 0.6995693002266871,
+          "max_drawdown": -0.12681935956709367,
+          "total_trades": 52
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.35353526900792076,
+          "profit_factor": 0.24618186868415468,
+          "max_drawdown": -0.35464322728137176,
+          "total_trades": 68
+        },
+        "ml_on": {
+          "net_pnl": -0.18723309246354347,
+          "profit_factor": 0.28662971310458696,
+          "max_drawdown": -0.19344327463045374,
+          "total_trades": 38
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.13919998529433997,
+          "profit_factor": 0.745264303447321,
+          "max_drawdown": -0.2546625081251932,
+          "total_trades": 81
+        },
+        "ml_on": {
+          "net_pnl": -0.015159153173499362,
+          "profit_factor": 0.9502959665301859,
+          "max_drawdown": -0.18087216182254906,
+          "total_trades": 52
+        }
+      }
+    },
+    "impulse_0.0010_minatr_0.0012": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.13361405576733887,
+          "profit_factor": 0.7520193367226604,
+          "max_drawdown": -0.2490765785981921,
+          "total_trades": 78
+        },
+        "ml_on": {
+          "net_pnl": -0.01721353914899737,
+          "profit_factor": 0.9435600184122981,
+          "max_drawdown": -0.18292654779804707,
+          "total_trades": 50
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.8110932002887239,
+          "profit_factor": 0.5335057397239648,
+          "max_drawdown": -0.9422733534324834,
+          "total_trades": 245
+        },
+        "ml_on": {
+          "net_pnl": -0.2900005144139186,
+          "profit_factor": 0.6729434944920417,
+          "max_drawdown": -0.4816569590730069,
+          "total_trades": 136
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.37098203533719243,
+          "profit_factor": 0.5190151968156959,
+          "max_drawdown": -0.39010994211639627,
+          "total_trades": 105
+        },
+        "ml_on": {
+          "net_pnl": -0.09489762998930473,
+          "profit_factor": 0.7111984694356732,
+          "max_drawdown": -0.1208410659993433,
+          "total_trades": 50
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.3280540114786845,
+          "profit_factor": 0.25619568814764426,
+          "max_drawdown": -0.3291619697521355,
+          "total_trades": 62
+        },
+        "ml_on": {
+          "net_pnl": -0.16578218509562248,
+          "profit_factor": 0.312140777632244,
+          "max_drawdown": -0.17199236726253275,
+          "total_trades": 35
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.13361405576733887,
+          "profit_factor": 0.7520193367226604,
+          "max_drawdown": -0.2490765785981921,
+          "total_trades": 78
+        },
+        "ml_on": {
+          "net_pnl": -0.01721353914899737,
+          "profit_factor": 0.9435600184122981,
+          "max_drawdown": -0.18292654779804707,
+          "total_trades": 50
+        }
+      }
+    },
+    "impulse_0.0010_minatr_0.0015": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.08476717446956172,
+          "profit_factor": 0.8262518735160596,
+          "max_drawdown": -0.20022969730041495,
+          "total_trades": 70
+        },
+        "ml_on": {
+          "net_pnl": 0.014802916345956874,
+          "profit_factor": 1.0546466297755406,
+          "max_drawdown": -0.1534489642108383,
+          "total_trades": 44
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.7097183494792034,
+          "profit_factor": 0.5638408829439656,
+          "max_drawdown": -0.840898502622963,
+          "total_trades": 223
+        },
+        "ml_on": {
+          "net_pnl": -0.2105369951132161,
+          "profit_factor": 0.7372909596752423,
+          "max_drawdown": -0.4115090482537198,
+          "total_trades": 121
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.35462709440480467,
+          "profit_factor": 0.5290731828827062,
+          "max_drawdown": -0.3725910210814618,
+          "total_trades": 101
+        },
+        "ml_on": {
+          "net_pnl": -0.07737870895437027,
+          "profit_factor": 0.7506608227944629,
+          "max_drawdown": -0.11263775344582427,
+          "total_trades": 47
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.29188098289932896,
+          "profit_factor": 0.26799289053474573,
+          "max_drawdown": -0.29298894117277996,
+          "total_trades": 52
+        },
+        "ml_on": {
+          "net_pnl": -0.1358540423248087,
+          "profit_factor": 0.34710936272310944,
+          "max_drawdown": -0.15200784895648667,
+          "total_trades": 29
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.08476717446956172,
+          "profit_factor": 0.8262518735160596,
+          "max_drawdown": -0.20022969730041495,
+          "total_trades": 70
+        },
+        "ml_on": {
+          "net_pnl": 0.014802916345956874,
+          "profit_factor": 1.0546466297755406,
+          "max_drawdown": -0.1534489642108383,
+          "total_trades": 44
+        }
+      }
+    },
+    "impulse_0.0010_minatr_0.0020": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.006952600821477972,
+          "profit_factor": 0.9823973628758865,
+          "max_drawdown": -0.1224151236523312,
+          "total_trades": 55
+        },
+        "ml_on": {
+          "net_pnl": 0.06428942077081956,
+          "profit_factor": 1.2996397066148297,
+          "max_drawdown": -0.1278207513362304,
+          "total_trades": 36
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.5113129292161602,
+          "profit_factor": 0.6205499957532055,
+          "max_drawdown": -0.6424930823599198,
+          "total_trades": 163
+        },
+        "ml_on": {
+          "net_pnl": -0.11552644630978648,
+          "profit_factor": 0.8260245105516554,
+          "max_drawdown": -0.31362135652591405,
+          "total_trades": 91
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.3350108133336107,
+          "profit_factor": 0.5174287983386024,
+          "max_drawdown": -0.350728443646517,
+          "total_trades": 80
+        },
+        "ml_on": {
+          "net_pnl": -0.06156355534017166,
+          "profit_factor": 0.7803973036539413,
+          "max_drawdown": -0.09551627199368795,
+          "total_trades": 38
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.19090641735556346,
+          "profit_factor": 0.29494988135857536,
+          "max_drawdown": -0.1937853994533043,
+          "total_trades": 28
+        },
+        "ml_on": {
+          "net_pnl": -0.10614515156044035,
+          "profit_factor": 0.3240673946480588,
+          "max_drawdown": -0.12999029560512554,
+          "total_trades": 16
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.006952600821477972,
+          "profit_factor": 0.9823973628758865,
+          "max_drawdown": -0.1224151236523312,
+          "total_trades": 55
+        },
+        "ml_on": {
+          "net_pnl": 0.06428942077081956,
+          "profit_factor": 1.2996397066148297,
+          "max_drawdown": -0.1278207513362304,
+          "total_trades": 36
+        }
+      }
+    },
+    "impulse_0.0012_minatr_0.0008": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.09399497740412244,
+          "profit_factor": 0.812476480974792,
+          "max_drawdown": -0.22231663851880512,
+          "total_trades": 77
+        },
+        "ml_on": {
+          "net_pnl": 0.008230156148670176,
+          "profit_factor": 1.0292265021323308,
+          "max_drawdown": -0.17072277918111922,
+          "total_trades": 50
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.8035191978623288,
+          "profit_factor": 0.525562065451335,
+          "max_drawdown": -0.9475584892899178,
+          "total_trades": 238
+        },
+        "ml_on": {
+          "net_pnl": -0.2862215117552296,
+          "profit_factor": 0.6666781632981356,
+          "max_drawdown": -0.4556173356037334,
+          "total_trades": 135
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.38161270388593493,
+          "profit_factor": 0.49113629381168583,
+          "max_drawdown": -0.39957663056259207,
+          "total_trades": 99
+        },
+        "ml_on": {
+          "net_pnl": -0.09579252997968979,
+          "profit_factor": 0.6882011783277016,
+          "max_drawdown": -0.10230103069682173,
+          "total_trades": 47
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.3494684188667634,
+          "profit_factor": 0.23177451543509253,
+          "max_drawdown": -0.3505763771402144,
+          "total_trades": 62
+        },
+        "ml_on": {
+          "net_pnl": -0.18655197774421595,
+          "profit_factor": 0.27626400689906,
+          "max_drawdown": -0.19190007530016828,
+          "total_trades": 37
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.09399497740412244,
+          "profit_factor": 0.812476480974792,
+          "max_drawdown": -0.22231663851880512,
+          "total_trades": 77
+        },
+        "ml_on": {
+          "net_pnl": 0.008230156148670176,
+          "profit_factor": 1.0292265021323308,
+          "max_drawdown": -0.17072277918111922,
+          "total_trades": 50
+        }
+      }
+    },
+    "impulse_0.0012_minatr_0.0010": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.08627635713480686,
+          "profit_factor": 0.8251834294930612,
+          "max_drawdown": -0.21459801824948954,
+          "total_trades": 76
+        },
+        "ml_on": {
+          "net_pnl": 0.008230156148670176,
+          "profit_factor": 1.0292265021323308,
+          "max_drawdown": -0.17072277918111922,
+          "total_trades": 50
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.7894911712140811,
+          "profit_factor": 0.5299515741885978,
+          "max_drawdown": -0.9335304626416701,
+          "total_trades": 235
+        },
+        "ml_on": {
+          "net_pnl": -0.2799121053762974,
+          "profit_factor": 0.6716129576854598,
+          "max_drawdown": -0.44930792922480123,
+          "total_trades": 133
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.38161270388593493,
+          "profit_factor": 0.49113629381168583,
+          "max_drawdown": -0.39957663056259207,
+          "total_trades": 99
+        },
+        "ml_on": {
+          "net_pnl": -0.09579252997968979,
+          "profit_factor": 0.6882011783277016,
+          "max_drawdown": -0.10230103069682173,
+          "total_trades": 47
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.3431590124878312,
+          "profit_factor": 0.2350343884668627,
+          "max_drawdown": -0.3442669707612822,
+          "total_trades": 60
+        },
+        "ml_on": {
+          "net_pnl": -0.18024257136528377,
+          "profit_factor": 0.2831959641287421,
+          "max_drawdown": -0.1855906689212361,
+          "total_trades": 35
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.08627635713480686,
+          "profit_factor": 0.8251834294930612,
+          "max_drawdown": -0.21459801824948954,
+          "total_trades": 76
+        },
+        "ml_on": {
+          "net_pnl": 0.008230156148670176,
+          "profit_factor": 1.0292265021323308,
+          "max_drawdown": -0.17072277918111922,
+          "total_trades": 50
+        }
+      }
+    },
+    "impulse_0.0012_minatr_0.0012": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.08069042760780576,
+          "profit_factor": 0.8339309275100474,
+          "max_drawdown": -0.20901208872248844,
+          "total_trades": 73
+        },
+        "ml_on": {
+          "net_pnl": 0.006175770173172168,
+          "profit_factor": 1.0219310735878613,
+          "max_drawdown": -0.17277716515661723,
+          "total_trades": 48
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.7487814042958689,
+          "profit_factor": 0.5425420866645816,
+          "max_drawdown": -0.8928206957234579,
+          "total_trades": 227
+        },
+        "ml_on": {
+          "net_pnl": -0.25333572065062526,
+          "profit_factor": 0.6924619139861211,
+          "max_drawdown": -0.4227315444991291,
+          "total_trades": 127
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.3744328405526858,
+          "profit_factor": 0.4958839016699758,
+          "max_drawdown": -0.3923967672293429,
+          "total_trades": 98
+        },
+        "ml_on": {
+          "net_pnl": -0.08861266664644063,
+          "profit_factor": 0.7046693111748513,
+          "max_drawdown": -0.10084040145784456,
+          "total_trades": 46
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.3152150384298693,
+          "profit_factor": 0.25064782923267864,
+          "max_drawdown": -0.3163229967033203,
+          "total_trades": 56
+        },
+        "ml_on": {
+          "net_pnl": -0.15879166399736278,
+          "profit_factor": 0.3096079355334887,
+          "max_drawdown": -0.1641397615533151,
+          "total_trades": 32
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.08069042760780576,
+          "profit_factor": 0.8339309275100474,
+          "max_drawdown": -0.20901208872248844,
+          "total_trades": 73
+        },
+        "ml_on": {
+          "net_pnl": 0.006175770173172168,
+          "profit_factor": 1.0219310735878613,
+          "max_drawdown": -0.17277716515661723,
+          "total_trades": 48
+        }
+      }
+    },
+    "impulse_0.0012_minatr_0.0015": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.04089502348676888,
+          "profit_factor": 0.9078944521415379,
+          "max_drawdown": -0.16921668460145156,
+          "total_trades": 66
+        },
+        "ml_on": {
+          "net_pnl": 0.03819222566812641,
+          "profit_factor": 1.15431512004119,
+          "max_drawdown": -0.1534489642108383,
+          "total_trades": 42
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.6525359637682868,
+          "profit_factor": 0.5747244868985474,
+          "max_drawdown": -0.7965752551958758,
+          "total_trades": 209
+        },
+        "ml_on": {
+          "net_pnl": -0.17273206769289118,
+          "profit_factor": 0.7660924448559003,
+          "max_drawdown": -0.35144350002281044,
+          "total_trades": 113
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.3569139195177513,
+          "profit_factor": 0.5073619190367601,
+          "max_drawdown": -0.37487784619440845,
+          "total_trades": 95
+        },
+        "ml_on": {
+          "net_pnl": -0.07109374561150617,
+          "profit_factor": 0.7477062451688568,
+          "max_drawdown": -0.09189999172178887,
+          "total_trades": 43
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.27628392305825855,
+          "profit_factor": 0.26975063352851225,
+          "max_drawdown": -0.27739188133170956,
+          "total_trades": 48
+        },
+        "ml_on": {
+          "net_pnl": -0.1277233875695174,
+          "profit_factor": 0.35189223229095623,
+          "max_drawdown": -0.14099821210345453,
+          "total_trades": 27
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.04089502348676888,
+          "profit_factor": 0.9078944521415379,
+          "max_drawdown": -0.16921668460145156,
+          "total_trades": 66
+        },
+        "ml_on": {
+          "net_pnl": 0.03819222566812641,
+          "profit_factor": 1.15431512004119,
+          "max_drawdown": -0.1534489642108383,
+          "total_trades": 42
+        }
+      }
+    },
+    "impulse_0.0012_minatr_0.0020": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": 0.020037399825810098,
+          "profit_factor": 1.0544516821679586,
+          "max_drawdown": -0.11301796744271542,
+          "total_trades": 53
+        },
+        "ml_on": {
+          "net_pnl": 0.07842028313427818,
+          "profit_factor": 1.391270194242081,
+          "max_drawdown": -0.1278207513362304,
+          "total_trades": 35
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.4784790989265275,
+          "profit_factor": 0.6264699412632423,
+          "max_drawdown": -0.6225183903541165,
+          "total_trades": 153
+        },
+        "ml_on": {
+          "net_pnl": -0.08697996584817247,
+          "profit_factor": 0.8574922545968541,
+          "max_drawdown": -0.2628142552537156,
+          "total_trades": 84
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.33729763844655736,
+          "profit_factor": 0.49329974982564123,
+          "max_drawdown": -0.35301526875946365,
+          "total_trades": 74
+        },
+        "ml_on": {
+          "net_pnl": -0.05527859199730756,
+          "profit_factor": 0.7804619439052043,
+          "max_drawdown": -0.07990199492905958,
+          "total_trades": 34
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.18277576260027217,
+          "profit_factor": 0.29636776123834657,
+          "max_drawdown": -0.18277576260027217,
+          "total_trades": 26
+        },
+        "ml_on": {
+          "net_pnl": -0.09801449680514907,
+          "profit_factor": 0.32878494299600036,
+          "max_drawdown": -0.12999029560512554,
+          "total_trades": 14
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": 0.020037399825810098,
+          "profit_factor": 1.0544516821679586,
+          "max_drawdown": -0.11301796744271542,
+          "total_trades": 53
+        },
+        "ml_on": {
+          "net_pnl": 0.07842028313427818,
+          "profit_factor": 1.391270194242081,
+          "max_drawdown": -0.1278207513362304,
+          "total_trades": 35
+        }
+      }
+    },
+    "impulse_0.0015_minatr_0.0008": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.07484027631710433,
+          "profit_factor": 0.8369643654232558,
+          "max_drawdown": -0.1887558569463863,
+          "total_trades": 68
+        },
+        "ml_on": {
+          "net_pnl": 0.02843052440084648,
+          "profit_factor": 1.1142825810756505,
+          "max_drawdown": -0.1458645105068399,
+          "total_trades": 43
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.6509648501823904,
+          "profit_factor": 0.5564302917949487,
+          "max_drawdown": -0.7805980611245786,
+          "total_trades": 200
+        },
+        "ml_on": {
+          "net_pnl": -0.1673995386124716,
+          "profit_factor": 0.7629551452348238,
+          "max_drawdown": -0.3487466824570902,
+          "total_trades": 111
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.27992672733330437,
+          "profit_factor": 0.5576729486306148,
+          "max_drawdown": -0.30199325448973013,
+          "total_trades": 84
+        },
+        "ml_on": {
+          "net_pnl": -0.022456012016959903,
+          "profit_factor": 0.9028144311592803,
+          "max_drawdown": -0.08197126993354686,
+          "total_trades": 39
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.31345204186686715,
+          "profit_factor": 0.20225160377832468,
+          "max_drawdown": -0.31345204186686715,
+          "total_trades": 49
+        },
+        "ml_on": {
+          "net_pnl": -0.16126689081636414,
+          "profit_factor": 0.24729294185628287,
+          "max_drawdown": -0.17063900524624387,
+          "total_trades": 28
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.07484027631710433,
+          "profit_factor": 0.8369643654232558,
+          "max_drawdown": -0.1887558569463863,
+          "total_trades": 68
+        },
+        "ml_on": {
+          "net_pnl": 0.02843052440084648,
+          "profit_factor": 1.1142825810756505,
+          "max_drawdown": -0.1458645105068399,
+          "total_trades": 43
+        }
+      }
+    },
+    "impulse_0.0015_minatr_0.0010": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.06712165604778875,
+          "profit_factor": 0.8512782787639351,
+          "max_drawdown": -0.18103723667707072,
+          "total_trades": 67
+        },
+        "ml_on": {
+          "net_pnl": 0.02843052440084648,
+          "profit_factor": 1.1142825810756505,
+          "max_drawdown": -0.1458645105068399,
+          "total_trades": 43
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.6369420215391983,
+          "profit_factor": 0.5617983900787156,
+          "max_drawdown": -0.7665752324813866,
+          "total_trades": 198
+        },
+        "ml_on": {
+          "net_pnl": -0.16109533023859512,
+          "profit_factor": 0.769827415159483,
+          "max_drawdown": -0.3424424740832137,
+          "total_trades": 110
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.27992672733330437,
+          "profit_factor": 0.5576729486306148,
+          "max_drawdown": -0.30199325448973013,
+          "total_trades": 84
+        },
+        "ml_on": {
+          "net_pnl": -0.022456012016959903,
+          "profit_factor": 0.9028144311592803,
+          "max_drawdown": -0.08197126993354686,
+          "total_trades": 39
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.3071478334929907,
+          "profit_factor": 0.20554953731913697,
+          "max_drawdown": -0.3071478334929907,
+          "total_trades": 48
+        },
+        "ml_on": {
+          "net_pnl": -0.15496268244248768,
+          "profit_factor": 0.2547900504192169,
+          "max_drawdown": -0.1643347968723674,
+          "total_trades": 27
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.06712165604778875,
+          "profit_factor": 0.8512782787639351,
+          "max_drawdown": -0.18103723667707072,
+          "total_trades": 67
+        },
+        "ml_on": {
+          "net_pnl": 0.02843052440084648,
+          "profit_factor": 1.1142825810756505,
+          "max_drawdown": -0.1458645105068399,
+          "total_trades": 43
+        }
+      }
+    },
+    "impulse_0.0015_minatr_0.0012": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.05948134054528964,
+          "profit_factor": 0.8659374547193404,
+          "max_drawdown": -0.17339692117457162,
+          "total_trades": 66
+        },
+        "ml_on": {
+          "net_pnl": 0.02843052440084648,
+          "profit_factor": 1.1142825810756505,
+          "max_drawdown": -0.1458645105068399,
+          "total_trades": 43
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.6088333749695494,
+          "profit_factor": 0.5728767429232479,
+          "max_drawdown": -0.7384665859117376,
+          "total_trades": 194
+        },
+        "ml_on": {
+          "net_pnl": -0.14712006586148618,
+          "profit_factor": 0.7855123859106705,
+          "max_drawdown": -0.32846720970610477,
+          "total_trades": 108
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.27992672733330437,
+          "profit_factor": 0.5576729486306148,
+          "max_drawdown": -0.30199325448973013,
+          "total_trades": 84
+        },
+        "ml_on": {
+          "net_pnl": -0.022456012016959903,
+          "profit_factor": 0.9028144311592803,
+          "max_drawdown": -0.08197126993354686,
+          "total_trades": 39
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.28667950242584084,
+          "profit_factor": 0.2170401135099338,
+          "max_drawdown": -0.28667950242584084,
+          "total_trades": 45
+        },
+        "ml_on": {
+          "net_pnl": -0.14098741806537873,
+          "profit_factor": 0.2731473385638799,
+          "max_drawdown": -0.15035953249525846,
+          "total_trades": 25
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.05948134054528964,
+          "profit_factor": 0.8659374547193404,
+          "max_drawdown": -0.17339692117457162,
+          "total_trades": 66
+        },
+        "ml_on": {
+          "net_pnl": 0.02843052440084648,
+          "profit_factor": 1.1142825810756505,
+          "max_drawdown": -0.1458645105068399,
+          "total_trades": 43
+        }
+      }
+    },
+    "impulse_0.0015_minatr_0.0015": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": -0.028544191490823323,
+          "profit_factor": 0.9304917031290663,
+          "max_drawdown": -0.1424597721201053,
+          "total_trades": 60
+        },
+        "ml_on": {
+          "net_pnl": 0.05158872482923016,
+          "profit_factor": 1.2307930023857527,
+          "max_drawdown": -0.13823437464827748,
+          "total_trades": 38
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.5380782341436543,
+          "profit_factor": 0.601097997165612,
+          "max_drawdown": -0.6677114450858426,
+          "total_trades": 180
+        },
+        "ml_on": {
+          "net_pnl": -0.09243408300017109,
+          "profit_factor": 0.8524691495417638,
+          "max_drawdown": -0.2830968353262051,
+          "total_trades": 97
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.2713482160344256,
+          "profit_factor": 0.5648224577412945,
+          "max_drawdown": -0.2926776460083147,
+          "total_trades": 82
+        },
+        "ml_on": {
+          "net_pnl": -0.013877500718081137,
+          "profit_factor": 0.9374175909747923,
+          "max_drawdown": -0.08197126993354686,
+          "total_trades": 37
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.25544002195329085,
+          "profit_factor": 0.2305078232135521,
+          "max_drawdown": -0.26575494469443584,
+          "total_trades": 39
+        },
+        "ml_on": {
+          "net_pnl": -0.11803814693132608,
+          "profit_factor": 0.3022009883310395,
+          "max_drawdown": -0.14879965024147168,
+          "total_trades": 21
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": -0.028544191490823323,
+          "profit_factor": 0.9304917031290663,
+          "max_drawdown": -0.1424597721201053,
+          "total_trades": 60
+        },
+        "ml_on": {
+          "net_pnl": 0.05158872482923016,
+          "profit_factor": 1.2307930023857527,
+          "max_drawdown": -0.13823437464827748,
+          "total_trades": 38
+        }
+      }
+    },
+    "impulse_0.0015_minatr_0.0020": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": 0.01425984868831165,
+          "profit_factor": 1.0404224676317058,
+          "max_drawdown": -0.10438943809481316,
+          "total_trades": 49
+        },
+        "ml_on": {
+          "net_pnl": 0.0830644544594179,
+          "profit_factor": 1.448487244699159,
+          "max_drawdown": -0.11260616177366956,
+          "total_trades": 32
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.4121932423601038,
+          "profit_factor": 0.6456229014729544,
+          "max_drawdown": -0.5418264533022921,
+          "total_trades": 138
+        },
+        "ml_on": {
+          "net_pnl": -0.03351394706555766,
+          "profit_factor": 0.9376557117954311,
+          "max_drawdown": -0.22129955646721555,
+          "total_trades": 76
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.2721154294140433,
+          "profit_factor": 0.5427555892034427,
+          "max_drawdown": -0.29459210589755,
+          "total_trades": 68
+        },
+        "ml_on": {
+          "net_pnl": -0.01643393649430891,
+          "profit_factor": 0.9228273895716973,
+          "max_drawdown": -0.07990199492905958,
+          "total_trades": 31
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.1715918569692576,
+          "profit_factor": 0.26200916586797934,
+          "max_drawdown": -0.18602431907947903,
+          "total_trades": 22
+        },
+        "ml_on": {
+          "net_pnl": -0.08803730485067263,
+          "profit_factor": 0.3083971688007958,
+          "max_drawdown": -0.13600946752876553,
+          "total_trades": 12
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": 0.01425984868831165,
+          "profit_factor": 1.0404224676317058,
+          "max_drawdown": -0.10438943809481316,
+          "total_trades": 49
+        },
+        "ml_on": {
+          "net_pnl": 0.0830644544594179,
+          "profit_factor": 1.448487244699159,
+          "max_drawdown": -0.11260616177366956,
+          "total_trades": 32
+        }
+      }
+    },
+    "impulse_0.0020_minatr_0.0008": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": 0.008152124890216328,
+          "profit_factor": 1.024582407263173,
+          "max_drawdown": -0.0751428246113619,
+          "total_trades": 50
+        },
+        "ml_on": {
+          "net_pnl": 0.07313288666387052,
+          "profit_factor": 1.4356048812749822,
+          "max_drawdown": -0.07332000304074882,
+          "total_trades": 33
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.4188995600004546,
+          "profit_factor": 0.6322475485250145,
+          "max_drawdown": -0.515221297951598,
+          "total_trades": 149
+        },
+        "ml_on": {
+          "net_pnl": -0.02378325929157654,
+          "profit_factor": 0.9529841359931569,
+          "max_drawdown": -0.1811345386265657,
+          "total_trades": 84
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.22977200644970708,
+          "profit_factor": 0.5857858965473431,
+          "max_drawdown": -0.24773593312636422,
+          "total_trades": 71
+        },
+        "ml_on": {
+          "net_pnl": 0.014092050590988947,
+          "profit_factor": 1.0750582261562427,
+          "max_drawdown": -0.06476391303090168,
+          "total_trades": 33
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.21453387377584932,
+          "profit_factor": 0.2054069615673551,
+          "max_drawdown": -0.21453387377584932,
+          "total_trades": 29
+        },
+        "ml_on": {
+          "net_pnl": -0.11100819654643601,
+          "profit_factor": 0.2610275876400068,
+          "max_drawdown": -0.14439103898496342,
+          "total_trades": 18
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": 0.008152124890216328,
+          "profit_factor": 1.024582407263173,
+          "max_drawdown": -0.0751428246113619,
+          "total_trades": 50
+        },
+        "ml_on": {
+          "net_pnl": 0.07313288666387052,
+          "profit_factor": 1.4356048812749822,
+          "max_drawdown": -0.07332000304074882,
+          "total_trades": 33
+        }
+      }
+    },
+    "impulse_0.0020_minatr_0.0010": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": 0.008152124890216328,
+          "profit_factor": 1.024582407263173,
+          "max_drawdown": -0.0751428246113619,
+          "total_trades": 50
+        },
+        "ml_on": {
+          "net_pnl": 0.07313288666387052,
+          "profit_factor": 1.4356048812749822,
+          "max_drawdown": -0.07332000304074882,
+          "total_trades": 33
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.4125953516265781,
+          "profit_factor": 0.6357661789421453,
+          "max_drawdown": -0.5089170895777215,
+          "total_trades": 148
+        },
+        "ml_on": {
+          "net_pnl": -0.01747905091770008,
+          "profit_factor": 0.9650105365788116,
+          "max_drawdown": -0.17483033025268924,
+          "total_trades": 83
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.22977200644970708,
+          "profit_factor": 0.5857858965473431,
+          "max_drawdown": -0.24773593312636422,
+          "total_trades": 71
+        },
+        "ml_on": {
+          "net_pnl": 0.014092050590988947,
+          "profit_factor": 1.0750582261562427,
+          "max_drawdown": -0.06476391303090168,
+          "total_trades": 33
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.20822966540197285,
+          "profit_factor": 0.2103177979715162,
+          "max_drawdown": -0.20822966540197285,
+          "total_trades": 28
+        },
+        "ml_on": {
+          "net_pnl": -0.10470398817255955,
+          "profit_factor": 0.2724618853429808,
+          "max_drawdown": -0.14439103898496342,
+          "total_trades": 17
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": 0.008152124890216328,
+          "profit_factor": 1.024582407263173,
+          "max_drawdown": -0.0751428246113619,
+          "total_trades": 50
+        },
+        "ml_on": {
+          "net_pnl": 0.07313288666387052,
+          "profit_factor": 1.4356048812749822,
+          "max_drawdown": -0.07332000304074882,
+          "total_trades": 33
+        }
+      }
+    },
+    "impulse_0.0020_minatr_0.0012": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": 0.008152124890216328,
+          "profit_factor": 1.024582407263173,
+          "max_drawdown": -0.0751428246113619,
+          "total_trades": 50
+        },
+        "ml_on": {
+          "net_pnl": 0.07313288666387052,
+          "profit_factor": 1.4356048812749822,
+          "max_drawdown": -0.07332000304074882,
+          "total_trades": 33
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.4125953516265781,
+          "profit_factor": 0.6357661789421453,
+          "max_drawdown": -0.5089170895777215,
+          "total_trades": 148
+        },
+        "ml_on": {
+          "net_pnl": -0.01747905091770008,
+          "profit_factor": 0.9650105365788116,
+          "max_drawdown": -0.17483033025268924,
+          "total_trades": 83
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.22977200644970708,
+          "profit_factor": 0.5857858965473431,
+          "max_drawdown": -0.24773593312636422,
+          "total_trades": 71
+        },
+        "ml_on": {
+          "net_pnl": 0.014092050590988947,
+          "profit_factor": 1.0750582261562427,
+          "max_drawdown": -0.06476391303090168,
+          "total_trades": 33
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.20822966540197285,
+          "profit_factor": 0.2103177979715162,
+          "max_drawdown": -0.20822966540197285,
+          "total_trades": 28
+        },
+        "ml_on": {
+          "net_pnl": -0.10470398817255955,
+          "profit_factor": 0.2724618853429808,
+          "max_drawdown": -0.14439103898496342,
+          "total_trades": 17
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": 0.008152124890216328,
+          "profit_factor": 1.024582407263173,
+          "max_drawdown": -0.0751428246113619,
+          "total_trades": 50
+        },
+        "ml_on": {
+          "net_pnl": 0.07313288666387052,
+          "profit_factor": 1.4356048812749822,
+          "max_drawdown": -0.07332000304074882,
+          "total_trades": 33
+        }
+      }
+    },
+    "impulse_0.0020_minatr_0.0015": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": 0.01427989960859577,
+          "profit_factor": 1.0441543070521944,
+          "max_drawdown": -0.07589939708316251,
+          "total_trades": 47
+        },
+        "ml_on": {
+          "net_pnl": 0.07926066138224996,
+          "profit_factor": 1.496394393825119,
+          "max_drawdown": -0.07437901634841637,
+          "total_trades": 30
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.4009789260580874,
+          "profit_factor": 0.6408518746366271,
+          "max_drawdown": -0.4973006640092308,
+          "total_trades": 142
+        },
+        "ml_on": {
+          "net_pnl": -0.005862625349209338,
+          "profit_factor": 0.9878682900585646,
+          "max_drawdown": -0.16471480101586167,
+          "total_trades": 77
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.23050910363224375,
+          "profit_factor": 0.5844571182800528,
+          "max_drawdown": -0.2484730303089009,
+          "total_trades": 70
+        },
+        "ml_on": {
+          "net_pnl": 0.013354953408452275,
+          "profit_factor": 1.0711322391847262,
+          "max_drawdown": -0.06476391303090168,
+          "total_trades": 32
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.20200391736932488,
+          "profit_factor": 0.2096858508511164,
+          "max_drawdown": -0.20411610011899484,
+          "total_trades": 26
+        },
+        "ml_on": {
+          "net_pnl": -0.09847824013991158,
+          "profit_factor": 0.27497332512336475,
+          "max_drawdown": -0.14439103898496342,
+          "total_trades": 15
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": 0.01427989960859577,
+          "profit_factor": 1.0441543070521944,
+          "max_drawdown": -0.07589939708316251,
+          "total_trades": 47
+        },
+        "ml_on": {
+          "net_pnl": 0.07926066138224996,
+          "profit_factor": 1.496394393825119,
+          "max_drawdown": -0.07437901634841637,
+          "total_trades": 30
+        }
+      }
+    },
+    "impulse_0.0020_minatr_0.0020": {
+      "30d": {
+        "ml_off": {
+          "net_pnl": 0.038599802463750166,
+          "profit_factor": 1.1307940541034769,
+          "max_drawdown": -0.0751428246113619,
+          "total_trades": 43
+        },
+        "ml_on": {
+          "net_pnl": 0.08400998408922078,
+          "profit_factor": 1.5565296609617911,
+          "max_drawdown": -0.07834915915282181,
+          "total_trades": 28
+        }
+      },
+      "90d": {
+        "ml_off": {
+          "net_pnl": -0.3224272669185666,
+          "profit_factor": 0.6812811787290639,
+          "max_drawdown": -0.41874900486971,
+          "total_trades": 121
+        },
+        "ml_on": {
+          "net_pnl": 0.017353586320496106,
+          "profit_factor": 1.0389851977927678,
+          "max_drawdown": -0.15323874695184259,
+          "total_trades": 67
+        }
+      },
+      "90d_seg1": {
+        "ml_off": {
+          "net_pnl": -0.21806764060147543,
+          "profit_factor": 0.5856620090037009,
+          "max_drawdown": -0.24054431708498214,
+          "total_trades": 61
+        },
+        "ml_on": {
+          "net_pnl": 0.017565441141300653,
+          "profit_factor": 1.0981578263966678,
+          "max_drawdown": -0.06476391303090168,
+          "total_trades": 29
+        }
+      },
+      "90d_seg2": {
+        "ml_off": {
+          "net_pnl": -0.16021362411572682,
+          "profit_factor": 0.2277632556174526,
+          "max_drawdown": -0.18602431907947903,
+          "total_trades": 18
+        },
+        "ml_on": {
+          "net_pnl": -0.08422183891002533,
+          "profit_factor": 0.2690878908728919,
+          "max_drawdown": -0.13600946752876553,
+          "total_trades": 10
+        }
+      },
+      "90d_seg3": {
+        "ml_off": {
+          "net_pnl": 0.038599802463750166,
+          "profit_factor": 1.1307940541034769,
+          "max_drawdown": -0.0751428246113619,
+          "total_trades": 43
+        },
+        "ml_on": {
+          "net_pnl": 0.08400998408922078,
+          "profit_factor": 1.5565296609617911,
+          "max_drawdown": -0.07834915915282181,
+          "total_trades": 28
+        }
+      }
+    }
+  }
+}
