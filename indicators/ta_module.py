@@ -50,7 +50,11 @@ def add_indicators(df: pd.DataFrame,
         df['ATR_14'] = _calculate_atr(
             df['high'], df['low'], df['close'], window=14
         )
+    else:
+        df['ATR_14'] = df[f'ATR_{atr_period}']
 
+    # 4.1 ADX (for regime detection)
+    df['ADX_14'] = _calculate_adx(df['high'], df['low'], df['close'], window=14)
     
     # 5. Volume SMA
     # Use 20 as default or pass it? For now, hardcode 20 or add arg if we want to be strict.
@@ -141,6 +145,31 @@ def _calculate_atr(high: pd.Series, low: pd.Series, close: pd.Series, window: in
     atr = tr.rolling(window=window).mean()
     
     return atr
+
+def _calculate_adx(high: pd.Series, low: pd.Series, close: pd.Series, window: int = 14) -> pd.Series:
+    """Calculates Average Directional Index (ADX)."""
+    prev_high = high.shift(1)
+    prev_low = low.shift(1)
+    prev_close = close.shift(1)
+
+    up_move = high - prev_high
+    down_move = prev_low - low
+
+    plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+    minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
+
+    tr1 = high - low
+    tr2 = (high - prev_close).abs()
+    tr3 = (low - prev_close).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+    atr = tr.rolling(window=window).mean()
+    plus_di = 100 * (plus_dm.rolling(window=window).mean() / atr.replace(0, np.nan))
+    minus_di = 100 * (minus_dm.rolling(window=window).mean() / atr.replace(0, np.nan))
+
+    dx = (100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan))
+    adx = dx.rolling(window=window).mean()
+    return adx
 
 if __name__ == "__main__":
     # Create valid dummy data for testing

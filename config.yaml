@@ -18,7 +18,7 @@ trading:
 
 # Strategy Settings
 strategy:
-  timeframe: "5" # Timeframe: "5" for 5-minute candles
+  timeframe: "15" # Timeframe: "15" for 15-minute candles
   ema_fast: 9
   ema_slow: 21
   atr_period: 20
@@ -30,8 +30,8 @@ strategy:
   volume_multiplier: 1.2
   volume_lookback: 20
   levels_lookback: 10
-  min_atr_threshold: 0.0015
-  impulse_threshold: 0.002
+  min_atr_threshold: 0.0020
+  impulse_threshold: 0.0020
   cooldown_candles: 4
   tp1_atr_mult: 1.0
   tp1_partial_pct: 0.5
@@ -47,6 +47,27 @@ ml:
   probability_threshold: 0.60
   flat_filter: true
 
+position_sizing:
+  enabled: false
+  min_size_mult: 0.5
+  max_size_mult: 1.5
+
+regime:
+  atr_regime_threshold: 0.0018
+  adx_threshold: 20
+
+risk_management:
+  partial_tp_enabled: true
+  partial_tp_atr_mult: 1.5
+  partial_tp_fraction: 0.3
+  be_enabled: true
+  be_buffer_bps: 2
+  trailing_enabled: true
+  trail_activation_atr: 1.0
+  trail_atr_mult: 2.0
+  time_stop_enabled: true
+  time_stop_candles: 12
+  prefer_worst_case: true
 
 # Risk Management
 risk:

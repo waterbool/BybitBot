@@ -123,6 +123,47 @@ def _apply_market_filters(df: pd.DataFrame, signal: int) -> int:
     return signal
 
 
+def _apply_regime_filter(df: pd.DataFrame, signal: int) -> int:
+    """
+    Allow trading only in trend_high_vol regime:
+    - ATR(14)/close > ATR_REGIME_THRESHOLD
+    - ADX(14) > ADX_THRESHOLD
+    """
+    if signal == 0 or not getattr(settings, 'REGIME_ENABLED', True):
+        return signal
+
+    row = df.iloc[-1]
+    close = row.get('close')
+    if close is None or pd.isna(close) or close == 0:
+        logger.info("Regime filter: invalid close -> reject signal")
+        return 0
+
+    atr14 = row.get('ATR_14')
+    if atr14 is None or pd.isna(atr14):
+        logger.info("Regime filter: ATR_14 missing -> reject signal")
+        return 0
+
+    atr_percent = float(atr14) / float(close)
+    if atr_percent <= settings.ATR_REGIME_THRESHOLD:
+        logger.info(
+            f"Regime filter: ATR% {atr_percent:.6f} <= {settings.ATR_REGIME_THRESHOLD:.6f} -> reject signal"
+        )
+        return 0
+
+    adx14 = row.get('ADX_14')
+    if adx14 is None or pd.isna(adx14):
+        logger.info("Regime filter: ADX_14 missing -> reject signal")
+        return 0
+
+    if float(adx14) <= settings.ADX_THRESHOLD:
+        logger.info(
+            f"Regime filter: ADX {float(adx14):.2f} <= {settings.ADX_THRESHOLD:.2f} -> reject signal"
+        )
+        return 0
+
+    return signal
+
+
 def _apply_impulse_filter(df: pd.DataFrame, signal: int) -> int:
     if signal == 0:
         return 0
@@ -373,6 +414,7 @@ def apply_strategy(df: pd.DataFrame) -> pd.DataFrame:
     impulse_signal = _apply_impulse_filter(df, base_signal)
     cooldown_signal = _apply_cooldown_filter(df, impulse_signal)
     market_signal = _apply_market_filters(df, cooldown_signal)
-    df.at[last_idx, 'signal'] = _apply_ml_filter(df, market_signal)
+    regime_signal = _apply_regime_filter(df, market_signal)
+    df.at[last_idx, 'signal'] = _apply_ml_filter(df, regime_signal)
 
     return df

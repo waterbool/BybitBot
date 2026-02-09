@@ -44,11 +44,32 @@ LEVELS_LOOKBACK = config.get("strategy", {}).get("levels_lookback", 10)
 MIN_ATR_THRESHOLD = float(config.get("strategy", {}).get("min_atr_threshold", 0.0015))
 IMPULSE_THRESHOLD = float(config.get("strategy", {}).get("impulse_threshold", 0.002))
 COOLDOWN_CANDLES = int(config.get("strategy", {}).get("cooldown_candles", 4))
-TP1_ATR_MULT = float(config.get("strategy", {}).get("tp1_atr_mult", 1.0))
-TP1_PARTIAL_PCT = float(config.get("strategy", {}).get("tp1_partial_pct", 0.5))
-TRAIL_ATR_MULT = float(config.get("strategy", {}).get("trail_atr_mult", 1.5))
-TRAIL_ACTIVATE_ATR = float(config.get("strategy", {}).get("trail_activate_atr", 1.0))
-TIME_STOP_CANDLES = int(config.get("strategy", {}).get("time_stop_candles", 24))
+risk_mgmt_cfg = config.get("risk_management", {})
+PARTIAL_TP_ENABLED = bool(risk_mgmt_cfg.get("partial_tp_enabled", True))
+PARTIAL_TP_ATR_MULT = float(
+    risk_mgmt_cfg.get("partial_tp_atr_mult", config.get("strategy", {}).get("tp1_atr_mult", 1.0))
+)
+PARTIAL_TP_FRACTION = float(
+    risk_mgmt_cfg.get("partial_tp_fraction", config.get("strategy", {}).get("tp1_partial_pct", 0.5))
+)
+BE_ENABLED = bool(risk_mgmt_cfg.get("be_enabled", True))
+BE_BUFFER_BPS = float(risk_mgmt_cfg.get("be_buffer_bps", 2))
+TRAILING_ENABLED = bool(risk_mgmt_cfg.get("trailing_enabled", True))
+TRAIL_ATR_MULT = float(
+    risk_mgmt_cfg.get("trail_atr_mult", config.get("strategy", {}).get("trail_atr_mult", 1.5))
+)
+TRAIL_ACTIVATE_ATR = float(
+    risk_mgmt_cfg.get("trail_activation_atr", config.get("strategy", {}).get("trail_activate_atr", 1.0))
+)
+TIME_STOP_ENABLED = bool(risk_mgmt_cfg.get("time_stop_enabled", True))
+TIME_STOP_CANDLES = int(
+    risk_mgmt_cfg.get("time_stop_candles", config.get("strategy", {}).get("time_stop_candles", 24))
+)
+PREFER_WORST_CASE = bool(risk_mgmt_cfg.get("prefer_worst_case", True))
+
+# Backward-compatible aliases
+TP1_ATR_MULT = PARTIAL_TP_ATR_MULT
+TP1_PARTIAL_PCT = PARTIAL_TP_FRACTION
 
 # --- ML Filter Settings ---
 ml_cfg = config.get("ml", {})
@@ -57,6 +78,18 @@ ML_HORIZON = int(ml_cfg.get("horizon_candles", 12))
 ML_MIN_PROB = float(ml_cfg.get("probability_threshold", 0.60))
 ML_FLAT_FILTER = bool(ml_cfg.get("flat_filter", True))
 ML_MODEL_PATH = str(ml_cfg.get("model_path", BASE_DIR / "models" / "ethusdt_5m_lgbm.pkl"))
+
+# --- Position Sizing ---
+position_sizing_cfg = config.get("position_sizing", {})
+POSITION_SIZING_ENABLED = bool(position_sizing_cfg.get("enabled", False))
+POSITION_SIZING_MIN_MULT = float(position_sizing_cfg.get("min_size_mult", 0.5))
+POSITION_SIZING_MAX_MULT = float(position_sizing_cfg.get("max_size_mult", 1.5))
+
+# --- Market Regime ---
+regime_cfg = config.get("regime", {})
+REGIME_ENABLED = bool(regime_cfg.get("enabled", True))
+ATR_REGIME_THRESHOLD = float(regime_cfg.get("atr_regime_threshold", 0.0018))
+ADX_THRESHOLD = float(regime_cfg.get("adx_threshold", 20))
 
 # Backward compatibility (if old strategy.* ML keys exist)
 ML_FLAT_THRESHOLD = float(config.get("strategy", {}).get("ml_flat_threshold", 0.002))

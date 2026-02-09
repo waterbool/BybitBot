@@ -3,6 +3,7 @@ import numpy as np
 
 from config import settings
 from indicators.ta_module import add_indicators
+from ml.model import add_ml_probabilities
 from strategy.rules import apply_strategy
 
 
@@ -49,11 +50,17 @@ def run_backtest(
         slippage_rate = float(slippage_bps) / 10000.0
 
     fee_rate = taker_fee_rate if use_taker else maker_fee_rate
-    tp1_atr_mult = float(getattr(settings, "TP1_ATR_MULT", 1.0))
-    tp1_partial_pct = float(getattr(settings, "TP1_PARTIAL_PCT", 0.5))
+    partial_tp_enabled = bool(getattr(settings, "PARTIAL_TP_ENABLED", True))
+    partial_tp_atr_mult = float(getattr(settings, "PARTIAL_TP_ATR_MULT", 1.0))
+    partial_tp_fraction = float(getattr(settings, "PARTIAL_TP_FRACTION", 0.5))
+    be_enabled = bool(getattr(settings, "BE_ENABLED", True))
+    be_buffer_bps = float(getattr(settings, "BE_BUFFER_BPS", 2))
+    trailing_enabled = bool(getattr(settings, "TRAILING_ENABLED", True))
     trail_atr_mult = float(getattr(settings, "TRAIL_ATR_MULT", 1.5))
     trail_activate_atr = float(getattr(settings, "TRAIL_ACTIVATE_ATR", 1.0))
+    time_stop_enabled = bool(getattr(settings, "TIME_STOP_ENABLED", True))
     time_stop_candles = int(getattr(settings, "TIME_STOP_CANDLES", 24))
+    prefer_worst_case = bool(getattr(settings, "PREFER_WORST_CASE", True))
 
     # Indicators (same as live)
     df = add_indicators(
@@ -62,6 +69,8 @@ def run_backtest(
         ema_slow=settings.EMA_SLOW,
         atr_period=settings.ATR_PERIOD,
     )
+    if getattr(settings, "ML_ENABLED", False):
+        df = add_ml_probabilities(df)
 
     balance = initial_balance
     equity_curve = []
@@ -69,10 +78,20 @@ def run_backtest(
     total_fees = 0.0
     total_slippage = 0.0
     gross_pnl_total = 0.0
+    position_sizes = []
 
     position = None  # dict with side, entry_price, qty, tp, sl, entry_time, entry_fee_remaining, entry_raw_price, entry_slip_remaining
     pending_entry = None  # dict with side, execute_idx, atr
     pending_exit = None  # dict with execute_idx
+    pending_time_exit = None  # dict with execute_idx
+    position_id = 0
+
+    def _calc_be_stop(entry_price: float, side: int) -> float:
+        buffer_rate = (be_buffer_bps / 10000.0) + (fee_rate * 2.0) + slippage_rate
+        buffer = entry_price * buffer_rate
+        if side == 1:
+            return entry_price + buffer
+        return entry_price - buffer
 
     def _close_position(exit_raw_price: float, exit_price: float, exit_reason: str, qty_close: float | None = None):
         nonlocal balance, total_fees, total_slippage, gross_pnl_total, position
@@ -80,13 +99,14 @@ def run_backtest(
         if position is None:
             return
 
+        qty_before = position['qty']
         if qty_close is None:
-            qty_close = position['qty']
-        qty_close = min(qty_close, position['qty'])
+            qty_close = qty_before
+        qty_close = min(qty_close, qty_before)
         if qty_close <= 0:
             return
 
-        ratio = qty_close / position['qty']
+        ratio = qty_close / qty_before
         entry_fee_portion = position.get('entry_fee_remaining', 0.0) * ratio
         entry_slip_portion = position.get('entry_slip_remaining', 0.0) * ratio
 
@@ -108,6 +128,8 @@ def run_backtest(
         total_slippage += entry_slip_portion + exit_slip
         gross_pnl_total += gross_pnl
 
+        is_partial = qty_close < qty_before
+        is_final = qty_close >= qty_before
         trades.append({
             'entry_time': position['entry_time'],
             'exit_time': exit_time_ts,
@@ -122,6 +144,13 @@ def run_backtest(
             'pnl': pnl,
             'result': 'WIN' if pnl > 0 else 'LOSS',
             'reason': exit_reason,
+            'position_id': position.get('id'),
+            'confidence': position.get('confidence'),
+            'size_mult': position.get('size_mult'),
+            'position_size_usdt': position.get('position_size_usdt'),
+            'is_partial': is_partial,
+            'is_final': is_final,
+            'final_reason': exit_reason if is_final else None,
             'balance': balance,
         })
 
@@ -160,106 +189,111 @@ def run_backtest(
         if position is not None:
             high = row['high']
             low = row['low']
-            exit_price = None
-            exit_reason = None
-            exit_raw_price = None
+            # Update trailing stop before evaluating exits
+            atr_col = f'ATR_{settings.ATR_PERIOD}'
+            atr_now = row.get(atr_col)
+            if trailing_enabled and atr_now is not None and not pd.isna(atr_now) and atr_now > 0:
+                if not position.get('trailing_active', False):
+                    atr_entry = position.get('atr_entry', atr_now)
+                    if position['side'] == 1:
+                        if high >= position['entry_price'] + trail_activate_atr * atr_entry:
+                            position['trailing_active'] = True
+                    else:
+                        if low <= position['entry_price'] - trail_activate_atr * atr_entry:
+                            position['trailing_active'] = True
+                if position.get('trailing_active', False):
+                    if position['side'] == 1:
+                        new_sl = high - trail_atr_mult * atr_now
+                        if new_sl > position['sl']:
+                            position['sl'] = new_sl
+                    else:
+                        new_sl = low + trail_atr_mult * atr_now
+                        if new_sl < position['sl']:
+                            position['sl'] = new_sl
 
-            # 1) Full TP/SL
+            def _apply_exit(raw_price: float, reason: str):
+                if position['side'] == 1:
+                    exec_price = raw_price * (1 - slippage_rate)
+                else:
+                    exec_price = raw_price * (1 + slippage_rate)
+                _close_position(raw_price, exec_price, reason)
+
+            def _apply_tp1():
+                tp1_price = position.get('tp1')
+                if tp1_price is None:
+                    return
+                if position['side'] == 1:
+                    exec_price = tp1_price * (1 - slippage_rate)
+                else:
+                    exec_price = tp1_price * (1 + slippage_rate)
+                fraction = max(0.0, min(1.0, partial_tp_fraction))
+                qty_close = position['qty'] * fraction
+                if qty_close <= 0:
+                    return
+                _close_position(tp1_price, exec_price, 'TP1', qty_close=qty_close)
+                if position is not None:
+                    position['tp1_hit'] = True
+                    if be_enabled:
+                        be_stop = _calc_be_stop(position['entry_price'], position['side'])
+                        if position['side'] == 1:
+                            position['sl'] = max(position['sl'], be_stop)
+                        else:
+                            position['sl'] = min(position['sl'], be_stop)
+
+            hit_tp1 = False
+            if partial_tp_enabled and not position.get('tp1_hit', False) and position.get('tp1') is not None:
+                hit_tp1 = (high >= position['tp1']) if position['side'] == 1 else (low <= position['tp1'])
+
             if position['side'] == 1:
                 hit_sl = low <= position['sl']
                 hit_tp = high >= position['tp']
-                if hit_sl and hit_tp:
-                    exit_raw_price = position['sl']
-                    exit_price = exit_raw_price * (1 - slippage_rate)
-                    exit_reason = 'SL'
-                elif hit_sl:
-                    exit_raw_price = position['sl']
-                    exit_price = exit_raw_price * (1 - slippage_rate)
-                    exit_reason = 'SL'
-                elif hit_tp:
-                    exit_raw_price = position['tp']
-                    exit_price = exit_raw_price * (1 - slippage_rate)
-                    exit_reason = 'TP'
             else:
                 hit_sl = high >= position['sl']
                 hit_tp = low <= position['tp']
-                if hit_sl and hit_tp:
-                    exit_raw_price = position['sl']
-                    exit_price = exit_raw_price * (1 + slippage_rate)
-                    exit_reason = 'SL'
-                elif hit_sl:
-                    exit_raw_price = position['sl']
-                    exit_price = exit_raw_price * (1 + slippage_rate)
-                    exit_reason = 'SL'
+
+            if prefer_worst_case:
+                if hit_sl:
+                    reason = 'TRAIL' if position.get('trailing_active', False) else 'SL'
+                    _apply_exit(position['sl'], reason)
+                elif hit_tp1 and hit_tp:
+                    _apply_tp1()
+                elif hit_tp1:
+                    _apply_tp1()
                 elif hit_tp:
-                    exit_raw_price = position['tp']
-                    exit_price = exit_raw_price * (1 + slippage_rate)
-                    exit_reason = 'TP'
+                    _apply_exit(position['tp'], 'TP')
+            else:
+                if hit_tp:
+                    _apply_exit(position['tp'], 'TP')
+                elif hit_tp1:
+                    _apply_tp1()
+                elif hit_sl:
+                    reason = 'TRAIL' if position.get('trailing_active', False) else 'SL'
+                    _apply_exit(position['sl'], reason)
 
-            if exit_price is not None:
-                _close_position(exit_raw_price, exit_price, exit_reason)
-                if position is None:
-                    pending_exit = None
+            if position is None:
+                pending_exit = None
+                pending_time_exit = None
 
-            # 2) Partial TP1 + move SL to BE
-            if position is not None and not position.get('tp1_hit', False):
-                tp1 = position.get('tp1')
-                if tp1 is not None:
-                    tp1_hit = (high >= tp1) if position['side'] == 1 else (low <= tp1)
-                    if tp1_hit:
-                        if position['side'] == 1:
-                            exit_raw_price = tp1
-                            exit_price = exit_raw_price * (1 - slippage_rate)
-                        else:
-                            exit_raw_price = tp1
-                            exit_price = exit_raw_price * (1 + slippage_rate)
-                        qty_close = position['qty'] * tp1_partial_pct
-                        _close_position(exit_raw_price, exit_price, 'TP1', qty_close=qty_close)
-                        if position is not None:
-                            if position['side'] == 1:
-                                be_stop = (position['entry_price'] * (1 + fee_rate)) / (1 - fee_rate)
-                                position['sl'] = max(position['sl'], be_stop)
-                            else:
-                                be_stop = (position['entry_price'] * (1 - fee_rate)) / (1 + fee_rate)
-                                position['sl'] = min(position['sl'], be_stop)
-                            position['tp1_hit'] = True
-
-            # 3) ATR trailing stop (after activation)
-            if position is not None:
-                atr_col = f'ATR_{settings.ATR_PERIOD}'
-                atr_now = row.get(atr_col)
-                if atr_now is not None and not pd.isna(atr_now) and atr_now > 0:
-                    if not position.get('trailing_active', False):
-                        atr_entry = position.get('atr_entry', atr_now)
-                        if position['side'] == 1:
-                            if high >= position['entry_price'] + trail_activate_atr * atr_entry:
-                                position['trailing_active'] = True
-                        else:
-                            if low <= position['entry_price'] - trail_activate_atr * atr_entry:
-                                position['trailing_active'] = True
-                    if position.get('trailing_active', False):
-                        if position['side'] == 1:
-                            new_sl = high - trail_atr_mult * atr_now
-                            if new_sl > position['sl']:
-                                position['sl'] = new_sl
-                        else:
-                            new_sl = low + trail_atr_mult * atr_now
-                            if new_sl < position['sl']:
-                                position['sl'] = new_sl
-
-            # 4) Time stop
-            if position is not None and time_stop_candles > 0:
+            # Time stop scheduling (next candle)
+            if position is not None and time_stop_enabled and time_stop_candles > 0 and pending_time_exit is None:
                 if (i - position['entry_idx']) >= time_stop_candles:
-                    raw_exit_price = row.get('close', row.get('open'))
-                    if position['side'] == 1:
-                        exit_price = raw_exit_price * (1 - slippage_rate)
-                    else:
-                        exit_price = raw_exit_price * (1 + slippage_rate)
-                    _close_position(raw_exit_price, exit_price, 'TIME')
-                    pending_exit = None
+                    exec_idx = i + 1
+                    if exec_idx < n_rows:
+                        pending_time_exit = {'execute_idx': exec_idx}
+
+            # Execute pending time stop
+            if position is not None and pending_time_exit is not None and i >= pending_time_exit['execute_idx']:
+                raw_exit_price = row.get('open', row.get('close'))
+                if position['side'] == 1:
+                    exit_price = raw_exit_price * (1 - slippage_rate)
+                else:
+                    exit_price = raw_exit_price * (1 + slippage_rate)
+                _close_position(raw_exit_price, exit_price, 'TIME')
+                pending_time_exit = None
+                pending_exit = None
 
         # If position open, consider signal-based exit with delay (not for TP/SL)
-        if position is not None and pending_exit is None:
+        if position is not None and pending_exit is None and pending_time_exit is None:
             signal_df = apply_strategy(current_df.copy())
             signal = int(signal_df.iloc[-1]['signal'])
             if signal != 0 and signal != position['side']:
@@ -287,25 +321,46 @@ def run_backtest(
                 entry_price = raw_entry_price * (1 + slippage_rate)
             else:
                 entry_price = raw_entry_price * (1 - slippage_rate)
-            qty = round(settings.FIXED_USDT_SIZE / entry_price, 6)
+            base_usdt = float(settings.FIXED_USDT_SIZE)
+            size_mult = 1.0
+            confidence = 0.0
+            if getattr(settings, "POSITION_SIZING_ENABLED", False):
+                min_mult = float(getattr(settings, "POSITION_SIZING_MIN_MULT", 0.5))
+                max_mult = float(getattr(settings, "POSITION_SIZING_MAX_MULT", 1.5))
+                prob = pending_entry.get('prob')
+                if prob is None or pd.isna(prob):
+                    confidence = 0.0
+                else:
+                    confidence = abs(float(prob) - 0.5) * 2.0
+                size_mult = min_mult + confidence * (max_mult - min_mult)
+                size_mult = max(min_mult, min(max_mult, size_mult))
+            position_size_usdt = base_usdt * size_mult
+            qty = round(position_size_usdt / entry_price, 6)
             tp, sl = _calc_tp_sl(entry_price, side, pending_entry['atr'])
             entry_fee = (entry_price * qty) * fee_rate
             entry_slip = abs(entry_price - raw_entry_price) * qty
             balance -= entry_fee
 
-            tp1_dist = pending_entry['atr'] * tp1_atr_mult
-            if side == 1:
-                tp1 = entry_price + tp1_dist
-            else:
-                tp1 = entry_price - tp1_dist
+            tp1 = None
+            if partial_tp_enabled and partial_tp_atr_mult > 0:
+                tp1_dist = pending_entry['atr'] * partial_tp_atr_mult
+                if side == 1:
+                    tp1 = entry_price + tp1_dist
+                else:
+                    tp1 = entry_price - tp1_dist
 
+            position_id += 1
             position = {
+                'id': position_id,
                 'side': side,
                 'entry_price': entry_price,
                 'entry_raw_price': raw_entry_price,
                 'entry_fee_remaining': entry_fee,
                 'entry_slip_remaining': entry_slip,
                 'qty': qty,
+                'position_size_usdt': position_size_usdt,
+                'size_mult': size_mult,
+                'confidence': confidence,
                 'tp': tp,
                 'sl': sl,
                 'tp1': tp1,
@@ -315,7 +370,10 @@ def run_backtest(
                 'entry_time': ts,
                 'entry_idx': i,
             }
+            position_sizes.append(position_size_usdt)
             pending_entry = None
+            pending_exit = None
+            pending_time_exit = None
 
         # If flat and no pending entry, evaluate new signal
         if position is None and pending_entry is None:
@@ -326,6 +384,12 @@ def run_backtest(
                 atr = row.get(atr_col)
                 if atr is None or pd.isna(atr) or atr == 0:
                     continue
+                prob = None
+                if getattr(settings, "ML_ENABLED", False):
+                    if signal == 1:
+                        prob = row.get('p_up')
+                    elif signal == -1:
+                        prob = row.get('p_down')
 
                 exec_idx = i + execution_delay_candles
                 if exec_idx >= n_rows:
@@ -334,6 +398,7 @@ def run_backtest(
                     'side': signal,
                     'execute_idx': exec_idx,
                     'atr': atr,
+                    'prob': prob,
                 }
 
     trades_df = pd.DataFrame(trades)
@@ -351,9 +416,32 @@ def run_backtest(
         gross_loss = -trades_df[trades_df['pnl'] < 0]['pnl'].sum()
         profit_factor = float(gross_profit / gross_loss) if gross_loss > 0 else float('inf')
         total_trades = len(trades_df)
+        partial_exits_count = int((trades_df['reason'] == 'TP1').sum())
+        final_exits = trades_df[trades_df.get('is_final', False)]
+        total_positions = len(final_exits)
+        if total_positions > 0:
+            trailing_exit_ratio = float((final_exits['final_reason'] == 'TRAIL').mean())
+            time_stop_exit_ratio = float((final_exits['final_reason'] == 'TIME').mean())
+        else:
+            trailing_exit_ratio = 0.0
+            time_stop_exit_ratio = 0.0
+        if not final_exits.empty and 'confidence' in final_exits.columns:
+            bins = [0.0, 0.3, 0.6, 1.0]
+            labels = ["0-0.3", "0.3-0.6", "0.6-1.0"]
+            conf = final_exits['confidence'].fillna(0.0).clip(0.0, 1.0)
+            bucket = pd.cut(conf, bins=bins, labels=labels, include_lowest=True)
+            pnl_by_conf = final_exits.groupby(bucket)['pnl'].sum().reindex(labels).fillna(0.0).to_dict()
+        else:
+            pnl_by_conf = {"0-0.3": 0.0, "0.3-0.6": 0.0, "0.6-1.0": 0.0}
     else:
         profit_factor = 0.0
         total_trades = 0
+        partial_exits_count = 0
+        trailing_exit_ratio = 0.0
+        time_stop_exit_ratio = 0.0
+        pnl_by_conf = {"0-0.3": 0.0, "0.3-0.6": 0.0, "0.6-1.0": 0.0}
+
+    avg_position_size = float(np.mean(position_sizes)) if position_sizes else 0.0
 
     # Monthly stats
     if not trades_df.empty:
@@ -378,6 +466,11 @@ def run_backtest(
         'net_pnl': balance - initial_balance,
         'total_fees': total_fees,
         'total_slippage_cost_estimate': total_slippage,
+        'partial_exits_count': partial_exits_count,
+        'trailing_exit_ratio': trailing_exit_ratio,
+        'time_stop_exit_ratio': time_stop_exit_ratio,
+        'avg_position_size': avg_position_size,
+        'pnl_by_confidence_bins': pnl_by_conf,
         'pnl_total': balance - initial_balance,
     }
 
