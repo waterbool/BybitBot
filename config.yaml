@@ -18,7 +18,7 @@ trading:
 
 # Strategy Settings
 strategy:
-  timeframe: "15" # Timeframe: "15" for 15-minute candles
+  timeframe: "30" # Timeframe: "30" for 30-minute candles
   ema_fast: 9
   ema_slow: 21
   atr_period: 20
@@ -37,7 +37,7 @@ strategy:
   tp1_partial_pct: 0.5
   trail_atr_mult: 1.5
   trail_activate_atr: 1.0
-  time_stop_candles: 24
+  time_stop_candles: 4
 
 ml:
   enabled: true
@@ -52,21 +52,17 @@ position_sizing:
   min_size_mult: 0.5
   max_size_mult: 1.5
 
-regime:
-  atr_regime_threshold: 0.0018
-  adx_threshold: 20
-
 risk_management:
   partial_tp_enabled: true
-  partial_tp_atr_mult: 1.5
-  partial_tp_fraction: 0.3
+  partial_tp_atr_mult: 1.0
+  partial_tp_fraction: 0.5
   be_enabled: true
   be_buffer_bps: 2
   trailing_enabled: true
   trail_activation_atr: 1.0
-  trail_atr_mult: 2.0
+  trail_atr_mult: 1.5
   time_stop_enabled: true
-  time_stop_candles: 12
+  time_stop_candles: 4
   prefer_worst_case: true
 
 # Risk Management

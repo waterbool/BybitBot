@@ -85,12 +85,6 @@ POSITION_SIZING_ENABLED = bool(position_sizing_cfg.get("enabled", False))
 POSITION_SIZING_MIN_MULT = float(position_sizing_cfg.get("min_size_mult", 0.5))
 POSITION_SIZING_MAX_MULT = float(position_sizing_cfg.get("max_size_mult", 1.5))
 
-# --- Market Regime ---
-regime_cfg = config.get("regime", {})
-REGIME_ENABLED = bool(regime_cfg.get("enabled", True))
-ATR_REGIME_THRESHOLD = float(regime_cfg.get("atr_regime_threshold", 0.0018))
-ADX_THRESHOLD = float(regime_cfg.get("adx_threshold", 20))
-
 # Backward compatibility (if old strategy.* ML keys exist)
 ML_FLAT_THRESHOLD = float(config.get("strategy", {}).get("ml_flat_threshold", 0.002))
 ML_MIN_TRAIN_SAMPLES = int(config.get("strategy", {}).get("ml_min_train_samples", 300))
