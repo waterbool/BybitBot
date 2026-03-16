@@ -77,3 +77,36 @@ backtest:
   use_taker: true
   slippage_bps: 2
   execution_delay_candles: 1
+
+live_selector:
+  enabled: true
+  symbols:
+    - "ETHUSDT"
+    - "BTCUSDT"
+    - "SOLUSDT"
+  strategies:
+    - "ema_crossover_baseline"
+    - "funding_extreme_reversal"
+  execution_mode: "paper"
+  edge_snapshot_path: "reports/live_edge_snapshot.json"
+  edge_lookback_days: 90
+  edge_max_age_minutes: 1440
+  require_edge_snapshot: true
+  use_ml: false
+  signal_weight: 0.4
+  edge_weight: 0.6
+  min_signal_score: 0.60
+  min_edge_score: 0.55
+  max_new_trades_per_day: 2
+  max_per_symbol_per_day: 1
+  max_per_strategy_per_day: 1
+  max_positions_total: 1
+  max_positions_per_symbol: 1
+  max_positions_per_strategy: 1
+  base_interval: "15"
+  htf_interval: "60"
+  base_lookback_bars: 500
+  htf_lookback_bars: 260
+  stale_data_minutes: 45
+  max_spread_bps: 8.0
+  scan_interval_seconds: 30

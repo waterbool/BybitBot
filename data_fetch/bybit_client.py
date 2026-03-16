@@ -514,6 +514,49 @@ def get_latest_kline(symbol: str, interval: str, category: str = 'linear') -> Di
     else:
         return {}
 
+
+def fetch_ticker(symbol: str, category: str = "linear") -> Dict:
+    """
+    Fetch latest ticker snapshot, including best bid/ask when available.
+
+    Args:
+        symbol: Trading symbol
+        category: Product category
+
+    Returns:
+        dict: Normalized ticker fields or empty dict if unavailable
+    """
+    endpoint = "/v5/market/tickers"
+    params = {
+        "category": category,
+        "symbol": symbol,
+    }
+
+    data = _make_request(endpoint, params)
+    result_list = data.get("result", {}).get("list", [])
+    if not result_list:
+        return {}
+
+    ticker = result_list[0]
+
+    def _to_float(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "symbol": ticker.get("symbol", symbol),
+        "last_price": _to_float(ticker.get("lastPrice")),
+        "bid_price": _to_float(ticker.get("bid1Price")),
+        "ask_price": _to_float(ticker.get("ask1Price")),
+        "mark_price": _to_float(ticker.get("markPrice")),
+        "index_price": _to_float(ticker.get("indexPrice")),
+        "open_interest": _to_float(ticker.get("openInterest")),
+        "funding_rate": _to_float(ticker.get("fundingRate")),
+        "timestamp": int(time.time() * 1000),
+    }
+
 if __name__ == "__main__":
     # Example usage
     symbol = "BTCUSDT"

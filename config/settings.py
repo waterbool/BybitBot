@@ -18,6 +18,26 @@ def load_config():
 
 config = load_config()
 
+
+def _ensure_symbol_list(value, fallback: str) -> list[str]:
+    if isinstance(value, list):
+        cleaned = [str(item).strip().upper() for item in value if str(item).strip()]
+        return cleaned or [fallback]
+    if isinstance(value, str):
+        cleaned = [part.strip().upper() for part in value.split(",") if part.strip()]
+        return cleaned or [fallback]
+    return [fallback]
+
+
+def _ensure_string_list(value, fallback: list[str]) -> list[str]:
+    if isinstance(value, list):
+        cleaned = [str(item).strip() for item in value if str(item).strip()]
+        return cleaned or list(fallback)
+    if isinstance(value, str):
+        cleaned = [part.strip() for part in value.split(",") if part.strip()]
+        return cleaned or list(fallback)
+    return list(fallback)
+
 # --- Bybit Config ---
 BYBIT_API_KEY = config.get("api", {}).get("api_key")
 BYBIT_API_SECRET = config.get("api", {}).get("api_secret")
@@ -117,6 +137,42 @@ BACKTEST_MAKER_FEE = float(backtest_cfg.get("maker_fee", 0.0002))
 BACKTEST_USE_TAKER = bool(backtest_cfg.get("use_taker", True))
 BACKTEST_SLIPPAGE_BPS = float(backtest_cfg.get("slippage_bps", 2))
 BACKTEST_EXECUTION_DELAY_CANDLES = int(backtest_cfg.get("execution_delay_candles", 1))
+
+# --- Live Multi-Symbol Selector ---
+live_selector_cfg = config.get("live_selector", {})
+LIVE_SELECTOR_ENABLED = bool(live_selector_cfg.get("enabled", False))
+LIVE_SELECTOR_SYMBOLS = _ensure_symbol_list(live_selector_cfg.get("symbols"), BYBIT_SYMBOL)
+LIVE_SELECTOR_STRATEGIES = _ensure_string_list(
+    live_selector_cfg.get("strategies"),
+    ["ema_crossover_baseline", "funding_extreme_reversal"],
+)
+LIVE_SELECTOR_EXECUTION_MODE = str(live_selector_cfg.get("execution_mode", "paper")).strip().lower()
+if LIVE_SELECTOR_EXECUTION_MODE not in {"paper", "live"}:
+    LIVE_SELECTOR_EXECUTION_MODE = "paper"
+LIVE_SELECTOR_EDGE_SNAPSHOT_PATH = str(
+    live_selector_cfg.get("edge_snapshot_path", BASE_DIR / "reports" / "live_edge_snapshot.json")
+)
+LIVE_SELECTOR_EDGE_LOOKBACK_DAYS = int(live_selector_cfg.get("edge_lookback_days", 90))
+LIVE_SELECTOR_EDGE_MAX_AGE_MINUTES = int(live_selector_cfg.get("edge_max_age_minutes", 24 * 60))
+LIVE_SELECTOR_REQUIRE_EDGE_SNAPSHOT = bool(live_selector_cfg.get("require_edge_snapshot", True))
+LIVE_SELECTOR_USE_ML = bool(live_selector_cfg.get("use_ml", False))
+LIVE_SELECTOR_SIGNAL_WEIGHT = float(live_selector_cfg.get("signal_weight", 0.4))
+LIVE_SELECTOR_EDGE_WEIGHT = float(live_selector_cfg.get("edge_weight", 0.6))
+LIVE_SELECTOR_MIN_SIGNAL_SCORE = float(live_selector_cfg.get("min_signal_score", 0.60))
+LIVE_SELECTOR_MIN_EDGE_SCORE = float(live_selector_cfg.get("min_edge_score", 0.55))
+LIVE_SELECTOR_MAX_NEW_TRADES_PER_DAY = int(live_selector_cfg.get("max_new_trades_per_day", 2))
+LIVE_SELECTOR_MAX_PER_SYMBOL_PER_DAY = int(live_selector_cfg.get("max_per_symbol_per_day", 1))
+LIVE_SELECTOR_MAX_PER_STRATEGY_PER_DAY = int(live_selector_cfg.get("max_per_strategy_per_day", 1))
+LIVE_SELECTOR_MAX_POSITIONS_TOTAL = int(live_selector_cfg.get("max_positions_total", 1))
+LIVE_SELECTOR_MAX_POSITIONS_PER_SYMBOL = int(live_selector_cfg.get("max_positions_per_symbol", 1))
+LIVE_SELECTOR_MAX_POSITIONS_PER_STRATEGY = int(live_selector_cfg.get("max_positions_per_strategy", 1))
+LIVE_SELECTOR_BASE_INTERVAL = str(live_selector_cfg.get("base_interval", "15"))
+LIVE_SELECTOR_HTF_INTERVAL = str(live_selector_cfg.get("htf_interval", "60"))
+LIVE_SELECTOR_BASE_LOOKBACK_BARS = int(live_selector_cfg.get("base_lookback_bars", 500))
+LIVE_SELECTOR_HTF_LOOKBACK_BARS = int(live_selector_cfg.get("htf_lookback_bars", 260))
+LIVE_SELECTOR_STALE_DATA_MINUTES = int(live_selector_cfg.get("stale_data_minutes", 45))
+LIVE_SELECTOR_MAX_SPREAD_BPS = float(live_selector_cfg.get("max_spread_bps", 8.0))
+LIVE_SELECTOR_SCAN_INTERVAL_SECONDS = int(live_selector_cfg.get("scan_interval_seconds", 30))
 
 
 # --- Binarium Config (Legacy/Hybrid) ---

@@ -4,7 +4,7 @@ Bot Controller - Manages bot lifecycle and state for web UI
 import threading
 import time
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from queue import Queue
 import pandas as pd
@@ -14,6 +14,9 @@ from data_fetch.bybit_client import fetch_historical_klines
 from indicators.ta_module import add_indicators
 from strategy.rules import apply_strategy
 from ml.model import add_ml_probabilities
+from live.edge_snapshot import load_edge_snapshot, snapshot_is_fresh, snapshot_age_minutes
+from live.scanner import scan_live_candidates
+from live.trade_gate import evaluate_trade_gate
 from risk.risk import RiskManager
 from pybit.unified_trading import HTTP
 
@@ -53,6 +56,17 @@ class BotController:
             "total_pnl": 0.0,
             "daily_pnl": 0.0,
             "daily_trades": 0
+        }
+        self.selector_state = {
+            "enabled": bool(getattr(settings, "LIVE_SELECTOR_ENABLED", False)),
+            "execution_mode": getattr(settings, "LIVE_SELECTOR_EXECUTION_MODE", "paper"),
+            "snapshot_path": getattr(settings, "LIVE_SELECTOR_EDGE_SNAPSHOT_PATH", ""),
+            "snapshot_loaded": False,
+            "snapshot_age_minutes": None,
+            "last_scan_at": None,
+            "last_candidate": None,
+            "last_gate_decision": None,
+            "last_skip_reason": None,
         }
         
         # Log queue for web UI
@@ -100,35 +114,65 @@ class BotController:
             return entry_price + buffer
         return entry_price - buffer
 
-    def _update_stop_loss(self, new_sl: float):
-        if settings.DRY_RUN:
-            logger.info(f"[DRY RUN] Update stop loss -> {new_sl}")
+    def _should_place_real_orders(self, execution_mode: Optional[str] = None) -> bool:
+        if execution_mode is not None:
+            mode = str(execution_mode).strip().lower()
+            return mode == "live"
+        if getattr(settings, "LIVE_SELECTOR_ENABLED", False):
+            mode = str(self._selector_execution_mode()).strip().lower()
+            return mode == "live"
+        return not settings.DRY_RUN
+
+    def _extract_signal_timestamp_ms(self, signal_row: pd.Series) -> Optional[int]:
+        candidates = [
+            signal_row.get("timestamp_ms"),
+            signal_row.get("timestamp"),
+            getattr(signal_row, "name", None),
+        ]
+        for value in candidates:
+            if value is None or pd.isna(value):
+                continue
+            if isinstance(value, (int, float)):
+                return int(value)
+            try:
+                return int(pd.Timestamp(value).timestamp() * 1000)
+            except Exception:
+                continue
+        return None
+
+    def _update_stop_loss(self, new_sl: float, symbol: Optional[str] = None):
+        symbol = symbol or (self.current_position or {}).get("symbol") or settings.BYBIT_SYMBOL
+        execution_mode = (self.current_position or {}).get("execution_mode")
+        if not self._should_place_real_orders(execution_mode):
+            logger.info(f"[DRY RUN] Update stop loss for {symbol} -> {new_sl}")
             return
         if not self.session:
             return
         try:
             resp = self.session.set_trading_stop(
                 category=settings.BYBIT_CATEGORY,
-                symbol=settings.BYBIT_SYMBOL,
+                symbol=symbol,
                 stopLoss=str(new_sl),
             )
             logger.info(f"Stop loss updated: {resp}")
         except Exception as e:
             logger.error(f"Failed to update stop loss: {e}")
 
-    def _close_position_market(self, qty: float, reason: str, price_hint: float, is_partial: bool):
+    def _close_position_market(self, qty: float, reason: str, price_hint: float, is_partial: bool, symbol: Optional[str] = None):
         if qty <= 0:
             return
+        symbol = symbol or (self.current_position or {}).get("symbol") or settings.BYBIT_SYMBOL
         side = "Sell" if self.current_position and self.current_position.get('side') == 1 else "Buy"
-        if settings.DRY_RUN:
-            logger.info(f"[DRY RUN] Close {qty} ({reason}) @ {price_hint}")
+        execution_mode = (self.current_position or {}).get("execution_mode")
+        if not self._should_place_real_orders(execution_mode):
+            logger.info(f"[DRY RUN] Close {symbol} {qty} ({reason}) @ {price_hint}")
         else:
             if not self.session:
                 return
             try:
                 resp = self.session.place_order(
-                    category="linear",
-                    symbol=settings.BYBIT_SYMBOL,
+                    category=settings.BYBIT_CATEGORY,
+                    symbol=symbol,
                     side=side,
                     orderType="Market",
                     qty=str(qty),
@@ -143,18 +187,38 @@ class BotController:
         if not self.current_position:
             return
 
+        entry_price = float(self.current_position.get('entry_price', price_hint) or price_hint)
+        direction = 1 if self.current_position.get('side') == 1 else -1
+        fee_rate, _ = self._assumed_fee_slippage()
+        gross_pnl = (float(price_hint) - entry_price) * float(qty) * direction
+        fees_paid = (entry_price + float(price_hint)) * float(qty) * fee_rate
+        realized_pnl = gross_pnl - fees_paid
+        self.current_position['realized_pnl'] = float(self.current_position.get('realized_pnl', 0.0) or 0.0) + realized_pnl
+        self.stats['total_pnl'] += realized_pnl
+        self.stats['daily_pnl'] += realized_pnl
+
         self.trades_history.append({
             'timestamp': datetime.now().isoformat(),
+            'event_type': 'exit',
+            'symbol': symbol,
+            'strategy_name': self.current_position.get('strategy_name') if self.current_position else None,
+            'execution_mode': self.current_position.get('execution_mode') if self.current_position else None,
             'side': side,
             'entry_price': self.current_position.get('entry_price'),
             'exit_price': price_hint,
             'qty': qty,
             'reason': reason,
             'is_partial': is_partial,
+            'realized_pnl': realized_pnl,
         })
 
         self.current_position['qty_remaining'] -= qty
         if self.current_position['qty_remaining'] <= 0:
+            final_pnl = float(self.current_position.get('realized_pnl', 0.0) or 0.0)
+            if final_pnl >= 0:
+                self.stats['winning_trades'] += 1
+            else:
+                self.stats['losing_trades'] += 1
             self.current_position = None
 
     def _manage_open_position(self, row: pd.Series, interval_mins: int):
@@ -200,7 +264,7 @@ class BotController:
                         pos['sl'] = new_sl
 
         if pos['sl'] != prev_sl:
-            self._update_stop_loss(pos['sl'])
+            self._update_stop_loss(pos['sl'], symbol=pos.get('symbol'))
 
         hit_tp1 = False
         if partial_tp_enabled and not pos.get('tp1_hit', False) and pos.get('tp1') is not None:
@@ -218,7 +282,7 @@ class BotController:
             qty_close = pos['qty_remaining'] * fraction
             if qty_close <= 0:
                 return
-            self._close_position_market(qty_close, "TP1", pos['tp1'], is_partial=True)
+            self._close_position_market(qty_close, "TP1", pos['tp1'], is_partial=True, symbol=pos.get('symbol'))
             if self.current_position:
                 self.current_position['tp1_hit'] = True
                 if be_enabled:
@@ -229,10 +293,10 @@ class BotController:
                         new_sl = min(self.current_position['sl'], be_stop)
                     if new_sl != self.current_position['sl']:
                         self.current_position['sl'] = new_sl
-                        self._update_stop_loss(new_sl)
+                        self._update_stop_loss(new_sl, symbol=self.current_position.get('symbol'))
 
         def _apply_full_exit(reason: str, price_hint: float):
-            self._close_position_market(pos['qty_remaining'], reason, price_hint, is_partial=False)
+            self._close_position_market(pos['qty_remaining'], reason, price_hint, is_partial=False, symbol=pos.get('symbol'))
 
         if prefer_worst_case:
             if hit_sl:
@@ -273,6 +337,7 @@ class BotController:
                             "TIME",
                             exit_price,
                             is_partial=False,
+                            symbol=self.current_position.get('symbol'),
                         )
     
     def start_trading(self) -> Dict:
@@ -315,10 +380,14 @@ class BotController:
             "current_position": self.current_position,
             "config": {
                 "symbol": settings.BYBIT_SYMBOL,
+                "symbols": getattr(settings, "LIVE_SELECTOR_SYMBOLS", [settings.BYBIT_SYMBOL]),
                 "dry_run": settings.DRY_RUN,
                 "testnet": settings.BYBIT_TESTNET,
-                "timeframe": settings.BYBIT_INTERVAL
-            }
+                "timeframe": settings.BYBIT_INTERVAL,
+                "live_selector_enabled": getattr(settings, "LIVE_SELECTOR_ENABLED", False),
+                "live_selector_mode": getattr(settings, "LIVE_SELECTOR_EXECUTION_MODE", "paper"),
+            },
+            "selector_state": self.selector_state,
         }
     
     def get_recent_logs(self, count: int = 100) -> List[Dict]:
@@ -336,19 +405,147 @@ class BotController:
                 self.log_queue.put(log)
         
         return temp_logs[-count:]
+
+    def _load_live_selector_snapshot(self) -> Optional[Dict]:
+        snapshot = load_edge_snapshot(settings.LIVE_SELECTOR_EDGE_SNAPSHOT_PATH)
+        self.selector_state["snapshot_loaded"] = snapshot is not None
+        self.selector_state["snapshot_age_minutes"] = snapshot_age_minutes(snapshot) if snapshot else None
+        return snapshot
+
+    def _fetch_latest_closed_row(self, symbol: str, interval: str, lookback_bars: int = 250) -> tuple[Optional[pd.Series], int]:
+        interval_mins = _interval_to_minutes(interval)
+        now = int(time.time() * 1000)
+        start_ts = now - ((lookback_bars + 3) * interval_mins * 60 * 1000)
+        df = fetch_historical_klines(symbol, interval, start_ts, now, category=settings.BYBIT_CATEGORY)
+        current_open_ts = (now // (interval_mins * 60 * 1000)) * (interval_mins * 60 * 1000)
+        df = df[df["timestamp"] < current_open_ts].copy()
+        if df.empty:
+            return None, interval_mins
+        df = df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp")
+        df = add_indicators(
+            df,
+            ema_fast=settings.EMA_FAST,
+            ema_slow=settings.EMA_SLOW,
+            atr_period=settings.ATR_PERIOD,
+        )
+        return df.iloc[-1], interval_mins
+
+    def _selector_execution_mode(self) -> str:
+        mode = str(getattr(settings, "LIVE_SELECTOR_EXECUTION_MODE", "paper")).strip().lower()
+        if mode not in {"paper", "live"}:
+            return "paper"
+        return mode
+
+    def _execute_candidate(self, candidate):
+        signal_row = pd.Series(candidate.signal_row)
+        if "timestamp_ms" not in signal_row:
+            try:
+                signal_row["timestamp_ms"] = int(pd.Timestamp(candidate.signal_time).timestamp() * 1000)
+            except Exception:
+                signal_row["timestamp_ms"] = None
+        self._execute_trade(
+            signal=candidate.side,
+            close_price=candidate.close_price,
+            signal_row=signal_row,
+            symbol=candidate.symbol,
+            strategy_name=candidate.strategy_name,
+            execution_mode=self._selector_execution_mode(),
+            base_interval=candidate.base_interval,
+            selector_metrics={
+                "signal_score": candidate.signal_score,
+                "edge_score": candidate.edge_score,
+                "selection_score": candidate.selection_score,
+                "signal_components": candidate.signal_components,
+                "edge_components": candidate.edge_components,
+            },
+        )
+
+    def _run_live_selector_cycle(self):
+        snapshot = self._load_live_selector_snapshot()
+        if settings.LIVE_SELECTOR_REQUIRE_EDGE_SNAPSHOT and not snapshot:
+            self.selector_state["last_skip_reason"] = "missing_edge_snapshot"
+            logger.warning("Live selector skipped: edge snapshot is missing")
+            return
+        if snapshot and not snapshot_is_fresh(snapshot, settings.LIVE_SELECTOR_EDGE_MAX_AGE_MINUTES):
+            self.selector_state["last_skip_reason"] = "stale_edge_snapshot"
+            logger.warning("Live selector skipped: edge snapshot is stale")
+            return
+
+        if self.current_position:
+            symbol = self.current_position.get("symbol", settings.BYBIT_SYMBOL)
+            interval = self.current_position.get("base_interval", settings.LIVE_SELECTOR_BASE_INTERVAL)
+            row, interval_mins = self._fetch_latest_closed_row(symbol, interval)
+            if row is not None:
+                self._manage_open_position(row, interval_mins)
+            else:
+                logger.warning(f"Unable to fetch latest closed candle for open position {symbol}")
+            return
+
+        candidates = scan_live_candidates(
+            symbols=settings.LIVE_SELECTOR_SYMBOLS,
+            edge_snapshot=snapshot,
+            strategy_names=settings.LIVE_SELECTOR_STRATEGIES,
+        )
+        self.selector_state["last_scan_at"] = datetime.utcnow().isoformat()
+        if not candidates:
+            self.selector_state["last_candidate"] = None
+            self.selector_state["last_gate_decision"] = None
+            self.selector_state["last_skip_reason"] = "no_candidates"
+            logger.info("Live selector: no current candidates")
+            return
+
+        candidate = candidates[0]
+        self.selector_state["last_candidate"] = candidate.to_dict()
+
+        decision = evaluate_trade_gate(
+            candidate=candidate,
+            current_position=self.current_position,
+            trades_history=self.trades_history,
+            edge_snapshot=snapshot,
+        )
+        self.selector_state["last_gate_decision"] = {
+            "allowed": decision.allowed,
+            "reasons": decision.reasons,
+            "metrics": decision.metrics,
+        }
+        if not decision.allowed:
+            self.selector_state["last_skip_reason"] = ",".join(decision.reasons)
+            logger.info(
+                "Live selector rejected %s %s: %s",
+                candidate.symbol,
+                candidate.strategy_name,
+                ", ".join(decision.reasons),
+            )
+            return
+
+        self.selector_state["last_skip_reason"] = None
+        logger.info(
+            "Live selector accepted %s %s score=%.4f edge=%.4f selection=%.4f",
+            candidate.symbol,
+            candidate.strategy_name,
+            candidate.signal_score,
+            candidate.edge_score,
+            candidate.selection_score,
+        )
+        self._execute_candidate(candidate)
     
     def _trading_loop(self):
         """Main trading loop (runs in separate thread)"""
         try:
             # Initialize
             self.risk_manager = RiskManager()
-            
-            if not settings.DRY_RUN:
+
+            live_selector_enabled = bool(getattr(settings, "LIVE_SELECTOR_ENABLED", False))
+            allow_real_execution = self._should_place_real_orders()
+            if live_selector_enabled and int(getattr(settings, "LIVE_SELECTOR_MAX_POSITIONS_TOTAL", 1)) > 1:
+                logger.warning("LIVE_SELECTOR_MAX_POSITIONS_TOTAL > 1 is configured, but controller currently supports only one open position.")
+
+            if allow_real_execution:
                 if not settings.BYBIT_API_KEY or not settings.BYBIT_API_SECRET:
                     logger.error("Real trading requires API keys")
                     self.status = "error"
                     return
-                
+
                 self.session = HTTP(
                     testnet=settings.BYBIT_TESTNET,
                     api_key=settings.BYBIT_API_KEY,
@@ -357,7 +554,10 @@ class BotController:
                 logger.info("Connected to Bybit API")
                 self.risk_manager.sync_from_api(self.session)
             else:
-                logger.info("DRY RUN MODE: No real orders will be placed")
+                if live_selector_enabled:
+                    logger.info("LIVE SELECTOR PAPER MODE: No real orders will be placed")
+                else:
+                    logger.info("DRY RUN MODE: No real orders will be placed")
             
             # Trading loop
             while not self.stop_flag.is_set():
@@ -368,52 +568,64 @@ class BotController:
                         time.sleep(60)
                         continue
                     
-                    # Fetch data
-                    now = int(time.time() * 1000)
-                    try:
-                        interval_mins = _interval_to_minutes(settings.BYBIT_INTERVAL)
-                    except ValueError as e:
-                        logger.error(str(e))
-                        time.sleep(60)
-                        continue
-                    ml_min_bars = int(getattr(settings, 'ML_MIN_TRAIN_SAMPLES', 300)) + int(getattr(settings, 'ML_HORIZON', 12)) + 50
-                    min_bars = max(200, ml_min_bars)
-                    lookback_mins = min_bars * interval_mins
-                    start_ts = now - (lookback_mins * 60 * 1000)
-                    
-                    df = fetch_historical_klines(settings.BYBIT_SYMBOL, settings.BYBIT_INTERVAL, start_ts, now)
-                    
-                    if len(df) < min_bars:
-                        logger.warning(f"Not enough data ({len(df)}/{min_bars} bars). Waiting...")
+                    if getattr(settings, "LIVE_SELECTOR_ENABLED", False):
+                        self._run_live_selector_cycle()
+                        time.sleep(max(5, int(getattr(settings, "LIVE_SELECTOR_SCAN_INTERVAL_SECONDS", 30))))
+                    else:
+                        # Fetch data
+                        now = int(time.time() * 1000)
+                        try:
+                            interval_mins = _interval_to_minutes(settings.BYBIT_INTERVAL)
+                        except ValueError as e:
+                            logger.error(str(e))
+                            time.sleep(60)
+                            continue
+                        ml_min_bars = int(getattr(settings, 'ML_MIN_TRAIN_SAMPLES', 300)) + int(getattr(settings, 'ML_HORIZON', 12)) + 50
+                        min_bars = max(200, ml_min_bars)
+                        lookback_mins = min_bars * interval_mins
+                        start_ts = now - (lookback_mins * 60 * 1000)
+                        
+                        df = fetch_historical_klines(
+                            settings.BYBIT_SYMBOL,
+                            settings.BYBIT_INTERVAL,
+                            start_ts,
+                            now,
+                            category=settings.BYBIT_CATEGORY,
+                        )
+                        current_open_ts = (now // (interval_mins * 60 * 1000)) * (interval_mins * 60 * 1000)
+                        df = df[df["timestamp"] < current_open_ts].copy()
+
+                        if len(df) < min_bars:
+                            logger.warning(f"Not enough data ({len(df)}/{min_bars} bars). Waiting...")
+                            time.sleep(10)
+                            continue
+                        
+                        # Add indicators and apply strategy
+                        df = add_indicators(
+                            df,
+                            ema_fast=settings.EMA_FAST,
+                            ema_slow=settings.EMA_SLOW,
+                            atr_period=settings.ATR_PERIOD
+                        )
+                        # ML probabilities (used as a filter in strategy rules)
+                        if getattr(settings, 'ML_ENABLED', False):
+                            df = add_ml_probabilities(df)
+                        df = apply_strategy(df)
+                        
+                        # Check signal
+                        current_signal_row = df.iloc[-1]
+                        signal = current_signal_row['signal']
+                        close_price = current_signal_row['close']
+                        if self.current_position:
+                            self._manage_open_position(current_signal_row, interval_mins)
+                        elif signal != 0:
+                            self._execute_trade(signal, close_price, current_signal_row)
+                        
+                        # Sleep
                         time.sleep(10)
-                        continue
-                    
-                    # Add indicators and apply strategy
-                    df = add_indicators(
-                        df,
-                        ema_fast=settings.EMA_FAST,
-                        ema_slow=settings.EMA_SLOW,
-                        atr_period=settings.ATR_PERIOD
-                    )
-                    # ML probabilities (used as a filter in strategy rules)
-                    if getattr(settings, 'ML_ENABLED', False):
-                        df = add_ml_probabilities(df)
-                    df = apply_strategy(df)
-                    
-                    # Check signal
-                    current_signal_row = df.iloc[-1]
-                    signal = current_signal_row['signal']
-                    close_price = current_signal_row['close']
-                    if self.current_position:
-                        self._manage_open_position(current_signal_row, interval_mins)
-                    elif signal != 0:
-                        self._execute_trade(signal, close_price, current_signal_row)
-                    
-                    # Sleep
-                    time.sleep(10)
                     
                     # Sync stats
-                    if not settings.DRY_RUN and self.session:
+                    if allow_real_execution and self.session:
                         self.risk_manager.sync_from_api(self.session)
                     
                 except Exception as e:
@@ -426,8 +638,27 @@ class BotController:
             logger.error(f"Fatal error in trading loop: {e}")
             self.status = "error"
     
-    def _execute_trade(self, signal: int, close_price: float, signal_row: pd.Series):
+    def _execute_trade(
+        self,
+        signal: int,
+        close_price: float,
+        signal_row: pd.Series,
+        symbol: Optional[str] = None,
+        strategy_name: Optional[str] = None,
+        execution_mode: Optional[str] = None,
+        base_interval: Optional[str] = None,
+        selector_metrics: Optional[Dict] = None,
+    ):
         """Execute a trade based on signal"""
+        if close_price <= 0:
+            logger.error("Invalid close price for trade execution: %s", close_price)
+            return
+
+        target_symbol = symbol or settings.BYBIT_SYMBOL
+        strategy_name = strategy_name or "single_symbol_strategy"
+        base_interval = base_interval or settings.BYBIT_INTERVAL
+        real_orders = self._should_place_real_orders(execution_mode)
+        normalized_execution_mode = "live" if real_orders else "paper"
         side = "Buy" if signal == 1 else "Sell"
         base_usdt = float(settings.FIXED_USDT_SIZE)
         size_mult = 1.0
@@ -448,6 +679,9 @@ class BotController:
             size_mult = max(min_mult, min(max_mult, size_mult))
         position_size_usdt = base_usdt * size_mult
         qty = round(position_size_usdt / close_price, 3)
+        if qty <= 0:
+            logger.warning("Calculated zero quantity for %s %s @ %s", target_symbol, strategy_name, close_price)
+            return
         
         # Calculate SL/TP
         atr_col = f'ATR_{settings.ATR_PERIOD}'
@@ -471,53 +705,89 @@ class BotController:
                 tp1_price = round(close_price + tp1_dist, 2)
             else:
                 tp1_price = round(close_price - tp1_dist, 2)
-        
-        logger.info(f"SIGNAL: {side} @ {close_price} | SL: {sl_price} | TP: {tp_price}")
-        
-        if settings.DRY_RUN:
-            logger.info(f"[DRY RUN] Order: Side={side}, Qty={qty}, Entry={close_price}, SL={sl_price}, TP={tp_price}")
-            
-            # Record trade
-            self.trades_history.append({
-                'timestamp': datetime.now().isoformat(),
-                'side': side,
-                'entry_price': close_price,
-                'qty': qty,
-                'sl': sl_price,
-                'tp': tp_price,
-                'tp1': tp1_price,
-                'confidence': confidence,
-                'size_mult': size_mult,
-                'position_size_usdt': position_size_usdt,
-                'status': 'simulated'
-            })
-            self.current_position = {
-                'side': signal,
-                'entry_price': close_price,
-                'qty': qty,
-                'qty_remaining': qty,
-                'sl': sl_price,
-                'tp': tp_price,
-                'tp1': tp1_price,
-                'confidence': confidence,
-                'size_mult': size_mult,
-                'position_size_usdt': position_size_usdt,
-                'tp1_hit': False,
-                'trailing_active': False,
-                'atr_entry': atr,
-                'entry_ts': signal_row.get('timestamp'),
-                'time_stop_pending': False,
-                'time_stop_trigger_ts': None,
-            }
+
+        signal_ts_ms = self._extract_signal_timestamp_ms(signal_row)
+
+        logger.info(
+            "SIGNAL: %s %s (%s) @ %s | SL: %s | TP: %s | mode=%s",
+            side,
+            target_symbol,
+            strategy_name,
+            close_price,
+            sl_price,
+            tp_price,
+            normalized_execution_mode,
+        )
+
+        trade_record = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'event_type': 'entry',
+            'symbol': target_symbol,
+            'strategy_name': strategy_name,
+            'execution_mode': normalized_execution_mode,
+            'side': side,
+            'entry_price': close_price,
+            'qty': qty,
+            'sl': sl_price,
+            'tp': tp_price,
+            'tp1': tp1_price,
+            'confidence': confidence,
+            'size_mult': size_mult,
+            'position_size_usdt': position_size_usdt,
+            'base_interval': base_interval,
+            'selector_metrics': selector_metrics,
+        }
+
+        self.current_position = {
+            'symbol': target_symbol,
+            'strategy_name': strategy_name,
+            'execution_mode': normalized_execution_mode,
+            'base_interval': base_interval,
+            'side': signal,
+            'entry_price': close_price,
+            'qty': qty,
+            'qty_remaining': qty,
+            'sl': sl_price,
+            'tp': tp_price,
+            'tp1': tp1_price,
+            'confidence': confidence,
+            'size_mult': size_mult,
+            'position_size_usdt': position_size_usdt,
+            'tp1_hit': False,
+            'trailing_active': False,
+            'atr_entry': atr,
+            'entry_ts': signal_ts_ms,
+            'selector_metrics': selector_metrics,
+            'realized_pnl': 0.0,
+            'time_stop_pending': False,
+            'time_stop_trigger_ts': None,
+        }
+
+        if not real_orders:
+            logger.info(
+                "[PAPER] Order: Symbol=%s, Side=%s, Qty=%s, Entry=%s, SL=%s, TP=%s",
+                target_symbol,
+                side,
+                qty,
+                close_price,
+                sl_price,
+                tp_price,
+            )
+            trade_record['status'] = 'simulated'
+            self.trades_history.append(trade_record)
             self.stats['total_trades'] += 1
             self.stats['daily_trades'] += 1
         else:
             # Execute real order
             try:
-                logger.info(f"Placing REAL {side} Order...")
+                if not self.session:
+                    logger.error("Real execution requested but Bybit session is not initialized")
+                    self.current_position = None
+                    return
+                logger.info(f"Placing REAL {side} Order for {target_symbol}...")
                 resp = self.session.place_order(
-                    category="linear",
-                    symbol=settings.BYBIT_SYMBOL,
+                    category=settings.BYBIT_CATEGORY,
+                    symbol=target_symbol,
                     side=side,
                     orderType="Market",
                     qty=str(qty),
@@ -526,44 +796,16 @@ class BotController:
                     timeInForce="GTC"
                 )
                 logger.info(f"Order Placed: {resp}")
-                
-                # Record trade
-                self.trades_history.append({
-                    'timestamp': datetime.now().isoformat(),
-                    'side': side,
-                    'entry_price': close_price,
-                    'qty': qty,
-                    'sl': sl_price,
-                    'tp': tp_price,
-                    'tp1': tp1_price,
-                    'confidence': confidence,
-                    'size_mult': size_mult,
-                    'position_size_usdt': position_size_usdt,
-                    'status': 'executed',
-                    'order_id': resp.get('result', {}).get('orderId')
-                })
-                self.current_position = {
-                    'side': signal,
-                    'entry_price': close_price,
-                    'qty': qty,
-                    'qty_remaining': qty,
-                    'sl': sl_price,
-                    'tp': tp_price,
-                    'tp1': tp1_price,
-                    'confidence': confidence,
-                    'size_mult': size_mult,
-                    'position_size_usdt': position_size_usdt,
-                    'tp1_hit': False,
-                    'trailing_active': False,
-                    'atr_entry': atr,
-                    'entry_ts': signal_row.get('timestamp'),
-                    'time_stop_pending': False,
-                    'time_stop_trigger_ts': None,
-                }
+
+                trade_record['status'] = 'executed'
+                trade_record['order_id'] = resp.get('result', {}).get('orderId')
+                self.current_position['order_id'] = trade_record['order_id']
+                self.trades_history.append(trade_record)
                 self.stats['total_trades'] += 1
                 self.stats['daily_trades'] += 1
                 
                 time.sleep(60)  # Avoid double entry
                 
             except Exception as e:
+                self.current_position = None
                 logger.error(f"Order execution failed: {e}")
