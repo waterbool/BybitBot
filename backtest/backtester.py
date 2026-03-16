@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from typing import Callable, Optional, Dict
 
 from config import settings
 from indicators.ta_module import add_indicators
@@ -29,6 +30,8 @@ def run_backtest(
     slippage_rate: float | None = None,
     execution_delay_candles: int | None = None,
     funding_rate_per_bar: float = 0.0,
+    strategy_fn: Callable[[pd.DataFrame], pd.DataFrame] = apply_strategy,
+    indicator_overrides: Optional[Dict[str, float | int]] = None,
 ) -> tuple[dict, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Backtest using the same EMA crossover strategy as live, with optional ML filter.
@@ -62,12 +65,23 @@ def run_backtest(
     time_stop_candles = int(getattr(settings, "TIME_STOP_CANDLES", 24))
     prefer_worst_case = bool(getattr(settings, "PREFER_WORST_CASE", True))
 
-    # Indicators (same as live)
+    indicator_overrides = indicator_overrides or {}
+    ema_fast = int(indicator_overrides.get("ema_fast", settings.EMA_FAST))
+    ema_slow = int(indicator_overrides.get("ema_slow", settings.EMA_SLOW))
+    rsi_period = int(indicator_overrides.get("rsi_period", 14))
+    atr_period = int(indicator_overrides.get("atr_period", settings.ATR_PERIOD))
+    bb_period = int(indicator_overrides.get("bb_period", 20))
+    bb_std = float(indicator_overrides.get("bb_std", 2.0))
+
+    # Indicators (same as live unless overridden)
     df = add_indicators(
         df,
-        ema_fast=settings.EMA_FAST,
-        ema_slow=settings.EMA_SLOW,
-        atr_period=settings.ATR_PERIOD,
+        ema_fast=ema_fast,
+        ema_slow=ema_slow,
+        rsi_period=rsi_period,
+        atr_period=atr_period,
+        bb_period=bb_period,
+        bb_std=bb_std,
     )
     if getattr(settings, "ML_ENABLED", False):
         df = add_ml_probabilities(df)
@@ -294,7 +308,7 @@ def run_backtest(
 
         # If position open, consider signal-based exit with delay (not for TP/SL)
         if position is not None and pending_exit is None and pending_time_exit is None:
-            signal_df = apply_strategy(current_df.copy())
+            signal_df = strategy_fn(current_df.copy())
             signal = int(signal_df.iloc[-1]['signal'])
             if signal != 0 and signal != position['side']:
                 exec_idx = i + execution_delay_candles
@@ -377,7 +391,7 @@ def run_backtest(
 
         # If flat and no pending entry, evaluate new signal
         if position is None and pending_entry is None:
-            signal_df = apply_strategy(current_df.copy())
+            signal_df = strategy_fn(current_df.copy())
             signal = int(signal_df.iloc[-1]['signal'])
             if signal != 0:
                 atr_col = f'ATR_{settings.ATR_PERIOD}'

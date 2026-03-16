@@ -365,6 +365,117 @@ def fetch_historical_klines(symbol: str, interval: str, start_time: int, end_tim
         category=category,
     )
 
+def fetch_open_interest_history(
+    symbol: str,
+    interval_time: str,
+    start_time: int,
+    end_time: int,
+    category: str = "linear",
+    limit: int = 200,
+) -> pd.DataFrame:
+    """
+    Fetch open interest history with pagination.
+
+    Args:
+        symbol: Trading symbol (e.g., 'ETHUSDT')
+        interval_time: '5min','15min','30min','1h','4h','1d'
+        start_time: Start timestamp in ms
+        end_time: End timestamp in ms
+        category: 'linear' or 'inverse'
+        limit: Max 200
+    """
+    endpoint = "/v5/market/open-interest"
+    all_rows: List[Dict] = []
+    cursor: Optional[str] = None
+
+    while True:
+        params = {
+            "category": category,
+            "symbol": symbol,
+            "intervalTime": interval_time,
+            "startTime": start_time,
+            "endTime": end_time,
+            "limit": limit,
+        }
+        if cursor:
+            params["cursor"] = cursor
+
+        data = _make_request(endpoint, params)
+        result = data.get("result", {})
+        rows = result.get("list", [])
+        if rows:
+            all_rows.extend(rows)
+        cursor = result.get("nextPageCursor") or ""
+        if not cursor:
+            break
+
+    if not all_rows:
+        return pd.DataFrame(columns=["timestamp", "open_interest"])
+
+    df = pd.DataFrame(all_rows)
+    # Fields: openInterest, timestamp (strings)
+    df = df.rename(columns={"openInterest": "open_interest", "timestamp": "timestamp"})
+    df["timestamp"] = df["timestamp"].astype("int64")
+    df["open_interest"] = df["open_interest"].astype("float64")
+    df = df.sort_values("timestamp")
+    return df
+
+def fetch_funding_rate_history(
+    symbol: str,
+    start_time: int,
+    end_time: int,
+    category: str = "linear",
+    limit: int = 200,
+) -> pd.DataFrame:
+    """
+    Fetch funding rate history. Endpoint supports limit up to 200, so we page backward by endTime.
+
+    Args:
+        symbol: Trading symbol (e.g., 'ETHUSDT')
+        start_time: Start timestamp in ms
+        end_time: End timestamp in ms
+        category: 'linear' or 'inverse'
+        limit: Max 200
+    """
+    endpoint = "/v5/market/funding/history"
+    all_rows: List[Dict] = []
+    current_end = end_time
+
+    while current_end > start_time:
+        params = {
+            "category": category,
+            "symbol": symbol,
+            "startTime": start_time,
+            "endTime": current_end,
+            "limit": limit,
+        }
+        data = _make_request(endpoint, params)
+        rows = data.get("result", {}).get("list", [])
+        if not rows:
+            break
+
+        all_rows.extend(rows)
+
+        # rows are typically in descending time order; move end before the oldest
+        oldest_ts = min(int(r["fundingRateTimestamp"]) for r in rows)
+        if oldest_ts <= start_time:
+            break
+        current_end = oldest_ts - 1
+
+        # Safety: if we can't move the window, break to avoid infinite loop
+        if current_end >= end_time:
+            break
+
+    if not all_rows:
+        return pd.DataFrame(columns=["timestamp", "funding_rate"])
+
+    df = pd.DataFrame(all_rows)
+    df = df.rename(columns={"fundingRate": "funding_rate", "fundingRateTimestamp": "timestamp"})
+    df["timestamp"] = df["timestamp"].astype("int64")
+    df["funding_rate"] = df["funding_rate"].astype("float64")
+    df = df.sort_values("timestamp")
+    return df
+
 def get_latest_kline(symbol: str, interval: str, category: str = 'linear') -> Dict:
     """
     Get the latest (most recent) kline.

@@ -8,7 +8,9 @@ def add_indicators(df: pd.DataFrame,
                    rsi_period: int = 14, 
                    stoch_k: int = 14, 
                    stoch_d: int = 3, 
-                   atr_period: int = 14) -> pd.DataFrame:
+                   atr_period: int = 14,
+                   bb_period: int = 20,
+                   bb_std: float = 2.0) -> pd.DataFrame:
     """
     Adds technical indicators to the DataFrame.
     
@@ -54,12 +56,19 @@ def add_indicators(df: pd.DataFrame,
         df['ATR_14'] = df[f'ATR_{atr_period}']
 
     
-    # 5. Volume SMA
+    # 5. Bollinger Bands
+    bb_mid = df['close'].rolling(window=bb_period).mean()
+    bb_std_dev = df['close'].rolling(window=bb_period).std()
+    df[f'BB_MID_{bb_period}'] = bb_mid
+    df[f'BB_UPPER_{bb_period}'] = bb_mid + (bb_std * bb_std_dev)
+    df[f'BB_LOWER_{bb_period}'] = bb_mid - (bb_std * bb_std_dev)
+
+    # 6. Volume SMA
     # Use 20 as default or pass it? For now, hardcode 20 or add arg if we want to be strict.
     # The requirement is just to add it. Let's add 'Volume_SMA_20'
     df['Volume_SMA_20'] = df['volume'].rolling(window=20).mean()
 
-    # 6. SMA (Simple Moving Average) - Strategy requires MA200
+    # 7. SMA (Simple Moving Average) - Strategy requires MA200
     # We allow flexible period, but default can be passed or we just add the one we need.
     # To keep it generic, let's add specific ones or generic arg.
     # The signature didn't change, so let's stick to what we have or add generic helpers.
@@ -67,7 +76,7 @@ def add_indicators(df: pd.DataFrame,
     # Let's add 'SMA_200' as standard for this strategy.
     df['SMA_200'] = _calculate_sma(df['close'], window=200)
 
-    # 7. Highest High / Lowest Low (for Donchian/Breakout logic)
+    # 8. Highest High / Lowest Low (for Donchian/Breakout logic)
     # Strategy needs HighestHigh(7) and LowestLow(7)
     df['HighestHigh_7'] = _calculate_rolling_max(df['high'], window=7)
     df['LowestLow_7'] = _calculate_rolling_min(df['low'], window=7)

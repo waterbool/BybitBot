@@ -376,3 +376,265 @@ def apply_strategy(df: pd.DataFrame) -> pd.DataFrame:
     df.at[last_idx, 'signal'] = _apply_ml_filter(df, market_signal)
 
     return df
+
+
+def apply_mean_reversion_strategy(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Mean reversion strategy signal generator.
+    LONG:
+      - close < EMA(50)
+      - RSI(14) < 30
+      - close < lower Bollinger(20, 2)
+      - ATR(14)/close > 0.0015
+    SHORT: зеркально
+    """
+    df['signal'] = 0
+
+    def _ensure_rsi_14(series: pd.Series) -> pd.Series:
+        delta = series.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss.replace(0, np.nan)
+        rsi = 100 - (100 / (1 + rs))
+        return rsi.fillna(0)
+
+    def _ensure_atr_14(high: pd.Series, low: pd.Series, close: pd.Series) -> pd.Series:
+        prev_close = close.shift(1)
+        tr1 = high - low
+        tr2 = (high - prev_close).abs()
+        tr3 = (low - prev_close).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        return tr.rolling(window=14).mean()
+
+    if 'EMA_50' not in df.columns:
+        df['EMA_50'] = df['close'].ewm(span=50, adjust=False).mean()
+    if 'RSI_14' not in df.columns:
+        df['RSI_14'] = _ensure_rsi_14(df['close'])
+    if 'BB_LOWER_20' not in df.columns or 'BB_UPPER_20' not in df.columns:
+        bb_mid = df['close'].rolling(window=20).mean()
+        bb_std = df['close'].rolling(window=20).std()
+        df['BB_MID_20'] = bb_mid
+        df['BB_UPPER_20'] = bb_mid + (2.0 * bb_std)
+        df['BB_LOWER_20'] = bb_mid - (2.0 * bb_std)
+    if 'ATR_14' not in df.columns:
+        df['ATR_14'] = _ensure_atr_14(df['high'], df['low'], df['close'])
+
+    close = df['close']
+    ema50 = df['EMA_50']
+    rsi14 = df['RSI_14']
+    bb_lower = df['BB_LOWER_20']
+    bb_upper = df['BB_UPPER_20']
+    atr14 = df['ATR_14']
+
+    atr_percent = atr14 / close.replace(0, np.nan)
+
+    long_cond = (
+        (close < ema50) &
+        (rsi14 < 30) &
+        (close < bb_lower) &
+        (atr_percent > 0.0015)
+    )
+    short_cond = (
+        (close > ema50) &
+        (rsi14 > 70) &
+        (close > bb_upper) &
+        (atr_percent > 0.0015)
+    )
+
+    df.loc[long_cond, 'signal'] = 1
+    df.loc[short_cond, 'signal'] = -1
+
+    last_idx = df.index[-1]
+    base_signal = int(df.at[last_idx, 'signal'])
+    if base_signal == 1:
+        logger.info("Mean reversion signal: BUY")
+    elif base_signal == -1:
+        logger.info("Mean reversion signal: SELL")
+    else:
+        logger.info("Mean reversion signal: NONE")
+
+    return df
+
+
+def apply_volatility_compression_breakout_strategy(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Volatility compression breakout strategy signal generator.
+    LONG:
+      - ATR(14) < atr_mean_50
+      - bb_width in lowest 10% over last 50 candles
+      - close > EMA(50)
+      - close > previous_close
+    SHORT: зеркально
+    """
+    df['signal'] = 0
+
+    if 'EMA_50' not in df.columns:
+        df['EMA_50'] = df['close'].ewm(span=50, adjust=False).mean()
+    if 'ATR_14' not in df.columns:
+        prev_close = df['close'].shift(1)
+        tr1 = df['high'] - df['low']
+        tr2 = (df['high'] - prev_close).abs()
+        tr3 = (df['low'] - prev_close).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        df['ATR_14'] = tr.rolling(window=14).mean()
+    if 'BB_LOWER_20' not in df.columns or 'BB_UPPER_20' not in df.columns:
+        bb_mid = df['close'].rolling(window=20).mean()
+        bb_std = df['close'].rolling(window=20).std()
+        df['BB_MID_20'] = bb_mid
+        df['BB_UPPER_20'] = bb_mid + (2.0 * bb_std)
+        df['BB_LOWER_20'] = bb_mid - (2.0 * bb_std)
+
+    close = df['close']
+    ema50 = df['EMA_50']
+    atr14 = df['ATR_14']
+    bb_upper = df['BB_UPPER_20']
+    bb_lower = df['BB_LOWER_20']
+
+    atr_mean_50 = atr14.rolling(window=50).mean()
+    bb_width = (bb_upper - bb_lower) / close.replace(0, np.nan)
+    min_bb_width_50 = bb_width.rolling(window=50).min()
+    bb_width_threshold = min_bb_width_50 * 1.10
+
+    prev_close = close.shift(1)
+
+    long_cond = (
+        (atr14 < atr_mean_50) &
+        (bb_width <= bb_width_threshold) &
+        (close > ema50) &
+        (close > prev_close)
+    )
+    short_cond = (
+        (atr14 < atr_mean_50) &
+        (bb_width <= bb_width_threshold) &
+        (close < ema50) &
+        (close < prev_close)
+    )
+
+    df.loc[long_cond, 'signal'] = 1
+    df.loc[short_cond, 'signal'] = -1
+
+    last_idx = df.index[-1]
+    base_signal = int(df.at[last_idx, 'signal'])
+    if base_signal == 1:
+        logger.info("Volatility compression signal: BUY")
+    elif base_signal == -1:
+        logger.info("Volatility compression signal: SELL")
+    else:
+        logger.info("Volatility compression signal: NONE")
+
+    return df
+
+
+def apply_mtf_trend_pullback_strategy(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Multi-timeframe trend pullback strategy signal generator.
+    Expects a 'bias' column in df:
+      1 = LONG bias (1H close > EMA200)
+     -1 = SHORT bias (1H close < EMA200)
+      0 = no bias / insufficient data
+
+    15m LONG:
+      - bias = LONG
+      - close touches or below EMA(50)
+      - RSI(14) < 45
+      - current close > previous close
+    SHORT: зеркально
+    """
+    df['signal'] = 0
+
+    if 'bias' not in df.columns:
+        logger.info("MTF pullback: bias missing -> no signals")
+        return df
+
+    if 'EMA_50' not in df.columns:
+        df['EMA_50'] = df['close'].ewm(span=50, adjust=False).mean()
+    if 'RSI_14' not in df.columns:
+        delta = df['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss.replace(0, np.nan)
+        rsi = 100 - (100 / (1 + rs))
+        df['RSI_14'] = rsi.fillna(0)
+
+    close = df['close']
+    ema50 = df['EMA_50']
+    rsi14 = df['RSI_14']
+    prev_close = close.shift(1)
+    bias = df['bias']
+
+    long_cond = (
+        (bias == 1) &
+        (close <= ema50) &
+        (rsi14 < 45) &
+        (close > prev_close)
+    )
+    short_cond = (
+        (bias == -1) &
+        (close >= ema50) &
+        (rsi14 > 55) &
+        (close < prev_close)
+    )
+
+    df.loc[long_cond, 'signal'] = 1
+    df.loc[short_cond, 'signal'] = -1
+
+    last_idx = df.index[-1]
+    base_signal = int(df.at[last_idx, 'signal'])
+    if base_signal == 1:
+        logger.info("MTF pullback signal: BUY")
+    elif base_signal == -1:
+        logger.info("MTF pullback signal: SELL")
+    else:
+        logger.info("MTF pullback signal: NONE")
+
+    return df
+
+
+def apply_funding_extreme_reversal_strategy(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Funding extreme reversal strategy signal generator.
+    LONG:
+      - funding_rate < -0.00007
+      - open_interest current >= previous
+      - close > previous_close
+    SHORT:
+      - funding_rate > 0.00007
+      - open_interest current >= previous
+      - close < previous_close
+    """
+    df['signal'] = 0
+
+    if 'funding_rate' not in df.columns or 'open_interest' not in df.columns:
+        logger.info("Funding extreme: missing funding_rate or open_interest -> no signals")
+        return df
+
+    close = df['close']
+    prev_close = close.shift(1)
+    oi = df['open_interest']
+    prev_oi = oi.shift(1)
+    fr = df['funding_rate']
+
+    long_cond = (
+        (fr < -0.00007) &
+        (oi >= prev_oi) &
+        (close > prev_close)
+    )
+    short_cond = (
+        (fr > 0.00007) &
+        (oi >= prev_oi) &
+        (close < prev_close)
+    )
+
+    df.loc[long_cond, 'signal'] = 1
+    df.loc[short_cond, 'signal'] = -1
+
+    last_idx = df.index[-1]
+    base_signal = int(df.at[last_idx, 'signal'])
+    if base_signal == 1:
+        logger.info("Funding extreme signal: BUY")
+    elif base_signal == -1:
+        logger.info("Funding extreme signal: SELL")
+    else:
+        logger.info("Funding extreme signal: NONE")
+
+    return df

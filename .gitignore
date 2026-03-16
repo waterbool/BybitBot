@@ -12,3 +12,9 @@ venv/
 
 # Logs
 *.log
+
+# Generated data and artifacts
+data/raw/
+data/processed/
+reports/
+models/*.pkl
