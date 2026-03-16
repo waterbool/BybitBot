@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from typing import Callable, Optional, Dict
+from typing import Callable, Optional, Dict, Any
 
 from config import settings
 from indicators.ta_module import add_indicators
@@ -32,6 +32,9 @@ def run_backtest(
     funding_rate_per_bar: float = 0.0,
     strategy_fn: Callable[[pd.DataFrame], pd.DataFrame] = apply_strategy,
     indicator_overrides: Optional[Dict[str, float | int]] = None,
+    score_fn: Optional[Callable[[pd.DataFrame, int], dict[str, Any] | float]] = None,
+    symbol: Optional[str] = None,
+    strategy_name: Optional[str] = None,
 ) -> tuple[dict, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Backtest using the same EMA crossover strategy as live, with optional ML filter.
@@ -107,6 +110,26 @@ def run_backtest(
             return entry_price + buffer
         return entry_price - buffer
 
+    def _resolve_signal_score(signal_df: pd.DataFrame, signal: int) -> tuple[float, dict[str, Any]]:
+        if score_fn is None or signal == 0:
+            return 0.0, {}
+        try:
+            score_payload = score_fn(signal_df.copy(), signal)
+        except Exception:
+            return 0.0, {}
+
+        if isinstance(score_payload, dict):
+            score = float(score_payload.get("score", 0.0))
+            components = score_payload.get("components", {}) or {}
+            if not isinstance(components, dict):
+                components = {}
+        else:
+            score = float(score_payload)
+            components = {}
+
+        score = max(0.0, min(1.0, score))
+        return score, components
+
     def _close_position(exit_raw_price: float, exit_price: float, exit_reason: str, qty_close: float | None = None):
         nonlocal balance, total_fees, total_slippage, gross_pnl_total, position
 
@@ -162,6 +185,11 @@ def run_backtest(
             'confidence': position.get('confidence'),
             'size_mult': position.get('size_mult'),
             'position_size_usdt': position.get('position_size_usdt'),
+            'symbol': position.get('symbol'),
+            'strategy_name': position.get('strategy_name'),
+            'signal_time': position.get('signal_time'),
+            'signal_score': position.get('signal_score'),
+            'score_components': position.get('score_components'),
             'is_partial': is_partial,
             'is_final': is_final,
             'final_reason': exit_reason if is_final else None,
@@ -204,7 +232,7 @@ def run_backtest(
             high = row['high']
             low = row['low']
             # Update trailing stop before evaluating exits
-            atr_col = f'ATR_{settings.ATR_PERIOD}'
+            atr_col = f'ATR_{atr_period}'
             atr_now = row.get(atr_col)
             if trailing_enabled and atr_now is not None and not pd.isna(atr_now) and atr_now > 0:
                 if not position.get('trailing_active', False):
@@ -375,6 +403,11 @@ def run_backtest(
                 'position_size_usdt': position_size_usdt,
                 'size_mult': size_mult,
                 'confidence': confidence,
+                'symbol': symbol,
+                'strategy_name': strategy_name,
+                'signal_time': pending_entry.get('signal_time'),
+                'signal_score': pending_entry.get('signal_score', 0.0),
+                'score_components': pending_entry.get('score_components', {}),
                 'tp': tp,
                 'sl': sl,
                 'tp1': tp1,
@@ -394,7 +427,7 @@ def run_backtest(
             signal_df = strategy_fn(current_df.copy())
             signal = int(signal_df.iloc[-1]['signal'])
             if signal != 0:
-                atr_col = f'ATR_{settings.ATR_PERIOD}'
+                atr_col = f'ATR_{atr_period}'
                 atr = row.get(atr_col)
                 if atr is None or pd.isna(atr) or atr == 0:
                     continue
@@ -413,7 +446,11 @@ def run_backtest(
                     'execute_idx': exec_idx,
                     'atr': atr,
                     'prob': prob,
+                    'signal_time': ts,
                 }
+                signal_score, score_components = _resolve_signal_score(signal_df, signal)
+                pending_entry['signal_score'] = signal_score
+                pending_entry['score_components'] = score_components
 
     trades_df = pd.DataFrame(trades)
     equity_df = pd.DataFrame(equity_curve)
@@ -460,7 +497,10 @@ def run_backtest(
     # Monthly stats
     if not trades_df.empty:
         trades_df['exit_time'] = pd.to_datetime(trades_df['exit_time'])
-        monthly = trades_df.groupby(trades_df['exit_time'].dt.to_period('M')).agg(
+        exit_time_naive = trades_df['exit_time']
+        if getattr(exit_time_naive.dt, "tz", None) is not None:
+            exit_time_naive = exit_time_naive.dt.tz_localize(None)
+        monthly = trades_df.groupby(exit_time_naive.dt.to_period('M')).agg(
             trades=('pnl', 'count'),
             pnl=('pnl', 'sum'),
             win_rate=('pnl', lambda x: (x > 0).mean() * 100.0),
