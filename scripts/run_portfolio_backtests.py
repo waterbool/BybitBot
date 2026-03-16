@@ -37,8 +37,13 @@ def main() -> None:
     parser.add_argument("--strategies", default=",".join(DEFAULT_STRATEGIES), help="Comma-separated strategy ids.")
     parser.add_argument("--lookback-days", type=int, default=90, help="Lookback window in days.")
     parser.add_argument("--initial-balance", type=float, default=settings.INITIAL_BALANCE, help="Starting balance for the portfolio summary.")
-    parser.add_argument("--top-per-day", type=int, default=max(1, min(int(settings.MAX_TRADES_PER_DAY), 3)), help="Maximum selected entries per day.")
-    parser.add_argument("--min-score", type=float, default=0.55, help="Minimum signal score required for selection.")
+    parser.add_argument("--top-per-day", type=int, default=max(1, min(int(settings.MAX_TRADES_PER_DAY), 2)), help="Maximum selected entries per day.")
+    parser.add_argument("--min-score", type=float, default=0.6, help="Minimum signal score required for selection.")
+    parser.add_argument("--min-edge-score", type=float, default=0.55, help="Minimum historical edge score required for a symbol+strategy pair.")
+    parser.add_argument("--signal-weight", type=float, default=0.4, help="Weight of raw signal score inside composite selection score.")
+    parser.add_argument("--edge-weight", type=float, default=0.6, help="Weight of historical edge score inside composite selection score.")
+    parser.add_argument("--max-per-symbol-per-day", type=int, default=1, help="Maximum selected positions per symbol per day.")
+    parser.add_argument("--max-per-strategy-per-day", type=int, default=1, help="Maximum selected positions per strategy per day.")
     parser.add_argument("--with-ml", action="store_true", help="Enable ML filter during underlying strategy backtests.")
     parser.add_argument("--summary-path", default=str(SUMMARY_PATH), help="Where to write JSON summary.")
     parser.add_argument("--selected-path", default=str(SELECTED_PATH), help="Where to write selected positions CSV.")
@@ -64,12 +69,18 @@ def main() -> None:
         positions_df=positions_df,
         top_n_per_day=args.top_per_day,
         min_score=args.min_score,
+        min_edge_score=args.min_edge_score,
+        signal_weight=args.signal_weight,
+        edge_weight=args.edge_weight,
+        max_per_symbol_per_day=args.max_per_symbol_per_day,
+        max_per_strategy_per_day=args.max_per_strategy_per_day,
     )
     portfolio_summary = summarize_portfolio_selection(
         positions_df=selected_df,
         initial_balance=args.initial_balance,
         top_n_per_day=args.top_per_day,
         min_score=args.min_score,
+        min_edge_score=args.min_edge_score,
         source_candidate_count=len(positions_df),
     )
     report = {
@@ -77,6 +88,15 @@ def main() -> None:
         "strategies": strategies,
         "lookback_days": int(args.lookback_days),
         "with_ml": bool(args.with_ml),
+        "selection_config": {
+            "min_score": float(args.min_score),
+            "min_edge_score": float(args.min_edge_score),
+            "signal_weight": float(args.signal_weight),
+            "edge_weight": float(args.edge_weight),
+            "max_per_symbol_per_day": int(args.max_per_symbol_per_day),
+            "max_per_strategy_per_day": int(args.max_per_strategy_per_day),
+            "top_per_day": int(args.top_per_day),
+        },
         "portfolio_summary": portfolio_summary,
         "underlying_results": results,
     }

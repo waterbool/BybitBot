@@ -1,5 +1,19 @@
 # Changelog
 
+## Update v0.5.1 — 2026-03-17
+
+### English
+- Added historical `edge_score` for each `symbol + strategy` pair based on profit factor, win rate, drawdown, sample size, and net PnL.
+- Upgraded portfolio selection from raw `signal_score` ranking to composite `selection_score = signal_score + edge_score` with configurable weights.
+- Added stricter quality-first filters: minimum edge threshold, per-symbol daily cap, and per-strategy daily cap.
+- Tightened default portfolio selection to fewer trades per day and higher minimum score requirements.
+
+### Русский
+- Добавлен исторический `edge_score` для каждой пары `symbol + strategy` на основе profit factor, win rate, drawdown, размера выборки и net PnL.
+- Портфельный отбор переведён с простого ранжирования по `signal_score` на составной `selection_score = signal_score + edge_score` с настраиваемыми весами.
+- Добавлены более жёсткие quality-first фильтры: минимальный порог edge, дневной лимит на символ и дневной лимит на стратегию.
+- Значения по умолчанию для портфельного отбора ужесточены в сторону меньшего числа сделок и более высокого минимального качества сигналов.
+
 ## Update v0.5.0 — 2026-03-17
 
 ### English
