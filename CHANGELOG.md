@@ -1,5 +1,21 @@
 # Changelog
 
+## Update v0.6.0 — 2026-03-17
+
+### English
+- Added a frozen `edge snapshot` pipeline for live selection, including snapshot build/load helpers and a CLI builder script.
+- Added a multi-symbol closed-candle live scanner with per-strategy data preparation for baseline, MTF, and funding-based setups.
+- Added a live `trade gate` with snapshot freshness checks, signal staleness checks, spread validation, and daily entry caps.
+- Extended the bot controller with selector-driven `paper/live` execution, symbol-aware position management, and richer trade metadata.
+- Enabled the new live selector in `paper` mode by default so the system can observe real-time candidates without sending real orders.
+
+### Русский
+- Добавлен пайплайн `edge snapshot` для live-отбора: сбор, загрузка и CLI-скрипт для построения исторического снимка качества.
+- Добавлен мульти-символьный live-сканер по закрытым свечам с отдельной подготовкой данных для baseline, MTF и funding-стратегий.
+- Добавлен live `trade gate` с проверками свежести snapshot, устаревания сигнала, спреда и дневных лимитов на новые входы.
+- Контроллер бота расширен для selector-driven `paper/live` исполнения, управления позициями по конкретным символам и сохранения расширенной метаинформации по сделкам.
+- Новый live selector включён в режиме `paper` по умолчанию, чтобы наблюдать реальные сигналы без отправки реальных ордеров.
+
 ## Update v0.5.1 — 2026-03-17
 
 ### English
