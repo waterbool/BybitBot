@@ -32,8 +32,9 @@ def _get_ml_model():
         return None
 
 
-def _apply_ml_filter(df: pd.DataFrame, signal: int) -> int:
-    if signal == 0 or not getattr(settings, 'ML_ENABLED', False):
+def _apply_ml_filter(df: pd.DataFrame, signal: int, ml_enabled: Optional[bool] = None) -> int:
+    effective_ml_enabled = getattr(settings, 'ML_ENABLED', False) if ml_enabled is None else bool(ml_enabled)
+    if signal == 0 or not effective_ml_enabled:
         return signal
 
     model = _get_ml_model()
@@ -219,8 +220,8 @@ class TrendFollowingStrategy:
         atr = row.get(atr_col)
         if pd.isna(atr):
             atr = row.get('ATR_20')
-        highest_high_7 = row.get('HighestHigh_7')
-        lowest_low_7 = row.get('LowestLow_7')
+        highest_high_7 = df['high'].shift(1).rolling(window=7).max().iloc[-1]
+        lowest_low_7 = df['low'].shift(1).rolling(window=7).min().iloc[-1]
         
         # Check if indicators are valid
         if pd.isna([ma200, atr, highest_high_7, lowest_low_7]).any():
@@ -336,7 +337,7 @@ class TrendFollowingStrategy:
 # To keep main.py causing less errors immediately, we can expose a helper.
 strategy_instance = TrendFollowingStrategy()
 
-def apply_strategy(df: pd.DataFrame) -> pd.DataFrame:
+def apply_strategy(df: pd.DataFrame, ml_enabled: Optional[bool] = None) -> pd.DataFrame:
     """
     EMA crossover strategy signal generator.
     Uses ML probabilities (if present) as a filter on the latest candle.
@@ -373,7 +374,7 @@ def apply_strategy(df: pd.DataFrame) -> pd.DataFrame:
     impulse_signal = _apply_impulse_filter(df, base_signal)
     cooldown_signal = _apply_cooldown_filter(df, impulse_signal)
     market_signal = _apply_market_filters(df, cooldown_signal)
-    df.at[last_idx, 'signal'] = _apply_ml_filter(df, market_signal)
+    df.at[last_idx, 'signal'] = _apply_ml_filter(df, market_signal, ml_enabled=ml_enabled)
 
     return df
 
@@ -406,39 +407,69 @@ def apply_mean_reversion_strategy(df: pd.DataFrame) -> pd.DataFrame:
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
         return tr.rolling(window=14).mean()
 
-    if 'EMA_50' not in df.columns:
-        df['EMA_50'] = df['close'].ewm(span=50, adjust=False).mean()
-    if 'RSI_14' not in df.columns:
-        df['RSI_14'] = _ensure_rsi_14(df['close'])
-    if 'BB_LOWER_20' not in df.columns or 'BB_UPPER_20' not in df.columns:
-        bb_mid = df['close'].rolling(window=20).mean()
-        bb_std = df['close'].rolling(window=20).std()
-        df['BB_MID_20'] = bb_mid
-        df['BB_UPPER_20'] = bb_mid + (2.0 * bb_std)
-        df['BB_LOWER_20'] = bb_mid - (2.0 * bb_std)
-    if 'ATR_14' not in df.columns:
-        df['ATR_14'] = _ensure_atr_14(df['high'], df['low'], df['close'])
+    ema_period = int(getattr(settings, "MEAN_REV_EMA_PERIOD", 50))
+    rsi_period = int(getattr(settings, "MEAN_REV_RSI_PERIOD", 14))
+    bb_period = int(getattr(settings, "MEAN_REV_BB_PERIOD", 20))
+    bb_std = float(getattr(settings, "MEAN_REV_BB_STD", 2.0))
+    atr_period = int(getattr(settings, "MEAN_REV_ATR_PERIOD", 14))
+    min_atr_pct = float(getattr(settings, "MEAN_REV_MIN_ATR_PCT", 0.0015))
+    rsi_long = float(getattr(settings, "MEAN_REV_RSI_LONG", 30.0))
+    rsi_short = float(getattr(settings, "MEAN_REV_RSI_SHORT", 70.0))
+
+    ema_col = f'EMA_{ema_period}'
+    rsi_col = f'RSI_{rsi_period}'
+    bb_lower_col = f'BB_LOWER_{bb_period}'
+    bb_upper_col = f'BB_UPPER_{bb_period}'
+    atr_col = f'ATR_{atr_period}'
+
+    if ema_col not in df.columns:
+        df[ema_col] = df['close'].ewm(span=ema_period, adjust=False).mean()
+    if rsi_col not in df.columns:
+        if rsi_period == 14:
+            df[rsi_col] = _ensure_rsi_14(df['close'])
+        else:
+            delta = df['close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=rsi_period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=rsi_period).mean()
+            rs = gain / loss.replace(0, np.nan)
+            df[rsi_col] = (100 - (100 / (1 + rs))).fillna(0)
+    if bb_lower_col not in df.columns or bb_upper_col not in df.columns:
+        bb_mid = df['close'].rolling(window=bb_period).mean()
+        bb_std_dev = df['close'].rolling(window=bb_period).std()
+        df[f'BB_MID_{bb_period}'] = bb_mid
+        df[bb_upper_col] = bb_mid + (bb_std * bb_std_dev)
+        df[bb_lower_col] = bb_mid - (bb_std * bb_std_dev)
+    if atr_col not in df.columns:
+        if atr_period == 14:
+            df[atr_col] = _ensure_atr_14(df['high'], df['low'], df['close'])
+        else:
+            prev_close = df['close'].shift(1)
+            tr1 = df['high'] - df['low']
+            tr2 = (df['high'] - prev_close).abs()
+            tr3 = (df['low'] - prev_close).abs()
+            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            df[atr_col] = tr.rolling(window=atr_period).mean()
 
     close = df['close']
-    ema50 = df['EMA_50']
-    rsi14 = df['RSI_14']
-    bb_lower = df['BB_LOWER_20']
-    bb_upper = df['BB_UPPER_20']
-    atr14 = df['ATR_14']
+    ema_series = df[ema_col]
+    rsi_series = df[rsi_col]
+    bb_lower = df[bb_lower_col]
+    bb_upper = df[bb_upper_col]
+    atr_series = df[atr_col]
 
-    atr_percent = atr14 / close.replace(0, np.nan)
+    atr_percent = atr_series / close.replace(0, np.nan)
 
     long_cond = (
-        (close < ema50) &
-        (rsi14 < 30) &
+        (close < ema_series) &
+        (rsi_series < rsi_long) &
         (close < bb_lower) &
-        (atr_percent > 0.0015)
+        (atr_percent > min_atr_pct)
     )
     short_cond = (
-        (close > ema50) &
-        (rsi14 > 70) &
+        (close > ema_series) &
+        (rsi_series > rsi_short) &
         (close > bb_upper) &
-        (atr_percent > 0.0015)
+        (atr_percent > min_atr_pct)
     )
 
     df.loc[long_cond, 'signal'] = 1
@@ -468,45 +499,57 @@ def apply_volatility_compression_breakout_strategy(df: pd.DataFrame) -> pd.DataF
     """
     df['signal'] = 0
 
-    if 'EMA_50' not in df.columns:
-        df['EMA_50'] = df['close'].ewm(span=50, adjust=False).mean()
-    if 'ATR_14' not in df.columns:
+    ema_period = int(getattr(settings, "VOL_COMP_EMA_PERIOD", 50))
+    atr_period = int(getattr(settings, "VOL_COMP_ATR_PERIOD", 14))
+    atr_ma_period = int(getattr(settings, "VOL_COMP_ATR_MA_PERIOD", 50))
+    bb_period = int(getattr(settings, "VOL_COMP_BB_PERIOD", 20))
+    bb_std = float(getattr(settings, "VOL_COMP_BB_STD", 2.0))
+    bb_width_mult = float(getattr(settings, "VOL_COMP_BB_WIDTH_MULT", 1.10))
+
+    ema_col = f'EMA_{ema_period}'
+    atr_col = f'ATR_{atr_period}'
+    bb_upper_col = f'BB_UPPER_{bb_period}'
+    bb_lower_col = f'BB_LOWER_{bb_period}'
+
+    if ema_col not in df.columns:
+        df[ema_col] = df['close'].ewm(span=ema_period, adjust=False).mean()
+    if atr_col not in df.columns:
         prev_close = df['close'].shift(1)
         tr1 = df['high'] - df['low']
         tr2 = (df['high'] - prev_close).abs()
         tr3 = (df['low'] - prev_close).abs()
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        df['ATR_14'] = tr.rolling(window=14).mean()
-    if 'BB_LOWER_20' not in df.columns or 'BB_UPPER_20' not in df.columns:
-        bb_mid = df['close'].rolling(window=20).mean()
-        bb_std = df['close'].rolling(window=20).std()
-        df['BB_MID_20'] = bb_mid
-        df['BB_UPPER_20'] = bb_mid + (2.0 * bb_std)
-        df['BB_LOWER_20'] = bb_mid - (2.0 * bb_std)
+        df[atr_col] = tr.rolling(window=atr_period).mean()
+    if bb_lower_col not in df.columns or bb_upper_col not in df.columns:
+        bb_mid = df['close'].rolling(window=bb_period).mean()
+        bb_std_dev = df['close'].rolling(window=bb_period).std()
+        df[f'BB_MID_{bb_period}'] = bb_mid
+        df[bb_upper_col] = bb_mid + (bb_std * bb_std_dev)
+        df[bb_lower_col] = bb_mid - (bb_std * bb_std_dev)
 
     close = df['close']
-    ema50 = df['EMA_50']
-    atr14 = df['ATR_14']
-    bb_upper = df['BB_UPPER_20']
-    bb_lower = df['BB_LOWER_20']
+    ema_series = df[ema_col]
+    atr_series = df[atr_col]
+    bb_upper = df[bb_upper_col]
+    bb_lower = df[bb_lower_col]
 
-    atr_mean_50 = atr14.rolling(window=50).mean()
+    atr_mean = atr_series.rolling(window=atr_ma_period).mean()
     bb_width = (bb_upper - bb_lower) / close.replace(0, np.nan)
-    min_bb_width_50 = bb_width.rolling(window=50).min()
-    bb_width_threshold = min_bb_width_50 * 1.10
+    min_bb_width = bb_width.rolling(window=atr_ma_period).min()
+    bb_width_threshold = min_bb_width * bb_width_mult
 
     prev_close = close.shift(1)
 
     long_cond = (
-        (atr14 < atr_mean_50) &
+        (atr_series < atr_mean) &
         (bb_width <= bb_width_threshold) &
-        (close > ema50) &
+        (close > ema_series) &
         (close > prev_close)
     )
     short_cond = (
-        (atr14 < atr_mean_50) &
+        (atr_series < atr_mean) &
         (bb_width <= bb_width_threshold) &
-        (close < ema50) &
+        (close < ema_series) &
         (close < prev_close)
     )
 
@@ -546,32 +589,40 @@ def apply_mtf_trend_pullback_strategy(df: pd.DataFrame) -> pd.DataFrame:
         logger.info("MTF pullback: bias missing -> no signals")
         return df
 
-    if 'EMA_50' not in df.columns:
-        df['EMA_50'] = df['close'].ewm(span=50, adjust=False).mean()
-    if 'RSI_14' not in df.columns:
+    ema_period = int(getattr(settings, "MTF_PULLBACK_EMA_PERIOD", 50))
+    rsi_period = int(getattr(settings, "MTF_PULLBACK_RSI_PERIOD", 14))
+    rsi_long = float(getattr(settings, "MTF_PULLBACK_RSI_LONG", 45.0))
+    rsi_short = float(getattr(settings, "MTF_PULLBACK_RSI_SHORT", 55.0))
+
+    ema_col = f'EMA_{ema_period}'
+    rsi_col = f'RSI_{rsi_period}'
+
+    if ema_col not in df.columns:
+        df[ema_col] = df['close'].ewm(span=ema_period, adjust=False).mean()
+    if rsi_col not in df.columns:
         delta = df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        gain = (delta.where(delta > 0, 0)).rolling(window=rsi_period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=rsi_period).mean()
         rs = gain / loss.replace(0, np.nan)
         rsi = 100 - (100 / (1 + rs))
-        df['RSI_14'] = rsi.fillna(0)
+        df[rsi_col] = rsi.fillna(0)
 
     close = df['close']
-    ema50 = df['EMA_50']
-    rsi14 = df['RSI_14']
+    ema_series = df[ema_col]
+    rsi_series = df[rsi_col]
     prev_close = close.shift(1)
     bias = df['bias']
 
     long_cond = (
         (bias == 1) &
-        (close <= ema50) &
-        (rsi14 < 45) &
+        (close <= ema_series) &
+        (rsi_series < rsi_long) &
         (close > prev_close)
     )
     short_cond = (
         (bias == -1) &
-        (close >= ema50) &
-        (rsi14 > 55) &
+        (close >= ema_series) &
+        (rsi_series > rsi_short) &
         (close < prev_close)
     )
 
@@ -613,16 +664,22 @@ def apply_funding_extreme_reversal_strategy(df: pd.DataFrame) -> pd.DataFrame:
     oi = df['open_interest']
     prev_oi = oi.shift(1)
     fr = df['funding_rate']
+    long_threshold = float(getattr(settings, "FUNDING_EXTREME_LONG_THRESHOLD", -0.00007))
+    short_threshold = float(getattr(settings, "FUNDING_EXTREME_SHORT_THRESHOLD", 0.00007))
+    oi_min_change = float(getattr(settings, "FUNDING_EXTREME_MIN_OI_CHANGE", 0.0))
+    price_move_min = float(getattr(settings, "FUNDING_EXTREME_MIN_PRICE_MOVE", 0.0))
+    oi_change = (oi - prev_oi) / prev_oi.replace(0, np.nan)
+    price_change = (close / prev_close.replace(0, np.nan)) - 1.0
 
     long_cond = (
-        (fr < -0.00007) &
-        (oi >= prev_oi) &
-        (close > prev_close)
+        (fr < long_threshold) &
+        (oi_change >= oi_min_change) &
+        (price_change >= price_move_min)
     )
     short_cond = (
-        (fr > 0.00007) &
-        (oi >= prev_oi) &
-        (close < prev_close)
+        (fr > short_threshold) &
+        (oi_change >= oi_min_change) &
+        (price_change <= -price_move_min)
     )
 
     df.loc[long_cond, 'signal'] = 1

@@ -1,17 +1,18 @@
 import argparse
 import time
 import logging
-from datetime import datetime
 from pybit.unified_trading import HTTP
-import pandas as pd
 
 # Import modules
 try:
     from config import settings
-    from data_fetch.bybit_client import fetch_historical_klines
-    from indicators.ta_module import add_indicators
-    from strategy.rules import TrendFollowingStrategy, SignalResult
+    from bot_controller import BotController
+    from backtest.backtester import run_backtest
     from risk.risk import RiskManager
+    from single_symbol_pipeline import (
+        fetch_price_frame_in_window,
+        fetch_signal_frame_for_lookback,
+    )
 except ImportError as e:
     print(f"Critical Error: Failed to import modules.\n{e}")
     exit(1)
@@ -27,86 +28,69 @@ def main():
     args = parser.parse_args()
 
     if args.mode == "backtest":
-        # Import dynamically to avoid circular issues or if not needed
-        from backtest.backtester import run_backtest
         run_backtest_mode()
     elif args.mode == "live":
         run_live_mode()
-
 def run_backtest_mode():
     logger.info("Starting Backtest Mode...")
-    # ... (Keep existing backtest logic or update if needed) ...
-    # For now, referring to existing logic, assuming it works with new settings
-    # We'll just reuse the basic flow
+    logger.info("CLI backtest uses the same single-symbol baseline strategy path as CLI live mode.")
     end_time = int(time.time() * 1000)
-    start_time = end_time - (365 * 24 * 60 * 60 * 1000) # 365 days for daily strategy
-    
+    start_time = end_time - (365 * 24 * 60 * 60 * 1000)
+
     logger.info(f"Fetching data for backtest (Symbol: {settings.BYBIT_SYMBOL}, Interval: {settings.BYBIT_INTERVAL})...")
-    df = fetch_historical_klines(settings.BYBIT_SYMBOL, settings.BYBIT_INTERVAL, start_time, end_time)
-    if df.empty: 
+    df, _interval_minutes = fetch_price_frame_in_window(
+        symbol=settings.BYBIT_SYMBOL,
+        interval=settings.BYBIT_INTERVAL,
+        start_ts=start_time,
+        end_ts=end_time,
+        category=settings.BYBIT_CATEGORY,
+        now_ms=end_time,
+    )
+    if df.empty:
         logger.error("No data fetched.")
         return
 
-    df = add_indicators(
+    metrics, trades_df, equity_df, _monthly_stats = run_backtest(
         df,
-        ema_fast=settings.EMA_FAST,
-        ema_slow=settings.EMA_SLOW,
-        atr_period=settings.ATR_PERIOD
+        initial_balance=settings.INITIAL_BALANCE,
     )
-    
-    # We can't use the simple 'apply_strategy' for full backtest metrics easily 
-    # without updating backtester to handle stateful strategy. 
-    # But user just expects the strategy file update. 
-    # We will print that backtest needs update or run simple signal check.
-    
-    from strategy.rules import apply_strategy
-    df = apply_strategy(df)
-    
-    print(f"\nBacktest Data range: {df.index[0]} to {df.index[-1]}")
-    print(f"Total bars: {len(df)}")
-    print(f"Potential Entry Signals found: {len(df[df['signal'] != 0])}")
-    
-    if not df[df['signal'] != 0].empty:
-        print("\nFirst 5 signals:")
-        print(df[df['signal'] != 0][['close', 'SMA_200', 'LowestLow_7', 'signal']].head())
 
-def get_equity(session, default=1000.0):
-    if settings.DRY_RUN or session is None:
-        return default
-    try:
-        resp = session.get_wallet_balance(accountType="UNIFIED", coin="USDT")
-        if resp['retCode'] == 0:
-            # Parse equity
-            # logic depends on response structure for Unified
-            coins = resp['result']['list'][0]['coin']
-            for c in coins:
-                if c['coin'] == 'USDT':
-                    return float(c['equity'])
-        return default
-    except Exception as e:
-        logger.error(f"Failed to fetch equity: {e}")
-        return default
+    start_dt = df["datetime"].iloc[0]
+    end_dt = df["datetime"].iloc[-1]
+    print(f"\nBacktest range: {start_dt} -> {end_dt}")
+    print(f"Bars: {len(df)}")
+    print(f"Trades: {metrics['total_trades']}")
+    print(f"Net PnL: {metrics['net_pnl']:.4f}")
+    print(f"Final balance: {metrics['final_balance']:.4f}")
+    print(f"Max drawdown: {metrics['max_drawdown']:.4f}")
+    print(f"Profit factor: {metrics['profit_factor']}")
+
+    if trades_df is not None and not trades_df.empty:
+        print("\nLast 5 trades:")
+        print(trades_df[['entry_time', 'exit_time', 'side', 'reason', 'pnl']].tail())
+    elif equity_df is not None and not equity_df.empty:
+        print("\nNo trades were executed on the fetched sample.")
+
 
 def run_live_mode():
-    logger.info(f"Starting LIVE Trading Mode (Symbol: {settings.BYBIT_SYMBOL})")
-    
-    # 1. Initialize Risk Manager and Strategy
-    risk_manager = RiskManager()
-    strategy = TrendFollowingStrategy(risk_percent=settings.RISK_PERCENT)
-    
-    session = None
+    logger.info(f"Starting LIVE Trading Mode (Single-Symbol Baseline, Symbol: {settings.BYBIT_SYMBOL})")
+    if getattr(settings, "LIVE_SELECTOR_ENABLED", False):
+        logger.info("LIVE_SELECTOR is enabled in config, but main.py runs the single-symbol baseline path. Use web_ui.py for selector mode.")
+
+    controller = BotController()
+    controller.risk_manager = RiskManager()
+
     if not settings.DRY_RUN:
         if not settings.BYBIT_API_KEY or not settings.BYBIT_API_SECRET:
             logger.error("Real trading requires API keys in config.yaml")
             return
-        session = HTTP(
+        controller.session = HTTP(
             testnet=settings.BYBIT_TESTNET,
             api_key=settings.BYBIT_API_KEY,
             api_secret=settings.BYBIT_API_SECRET
         )
         logger.info("Connected to Bybit API.")
-        # Sync initial stats
-        risk_manager.sync_from_api(session)
+        controller.risk_manager.sync_from_api(controller.session)
     else:
         logger.info("--- DRY RUN MODE ACTIVE: No real orders will be sent ---")
 
@@ -114,97 +98,44 @@ def run_live_mode():
 
     while True:
         try:
-            # 2. Risk Check
-            if not risk_manager.can_trade():
+            if not controller.risk_manager.can_trade():
                 logger.warning("Risk limits reached. Sleeping for 15 minutes...")
                 time.sleep(900)
                 continue
 
-            # 3. Fetch Data
-            now = int(time.time() * 1000)
-            # Daily interval needs long lookback for MA200 (at least 200 bars)
-            lookback_days = 300 
-            start_ts = now - (lookback_days * 24 * 60 * 60 * 1000)
-            
-            df = fetch_historical_klines(settings.BYBIT_SYMBOL, settings.BYBIT_INTERVAL, start_ts, now)
-            
-            if len(df) < 205:
-                logger.warning(f"Not enough data ({len(df)} bars). Waiting...")
-                time.sleep(60) # Wait longer for Daily
+            df, interval_mins = fetch_signal_frame_for_lookback(
+                symbol=settings.BYBIT_SYMBOL,
+                interval=settings.BYBIT_INTERVAL,
+                category=settings.BYBIT_CATEGORY,
+            )
+            if df.empty:
+                logger.warning("No closed candles available for live loop. Waiting...")
+                time.sleep(10)
                 continue
 
-            # 4. Indicators
-            df = add_indicators(
-                df,
-                ema_fast=settings.EMA_FAST,
-                ema_slow=settings.EMA_SLOW,
-                atr_period=settings.ATR_PERIOD
-            )
-            
-            # 5. Analyze Market
-            equity = get_equity(session, default=settings.INITIAL_BALANCE)
-            result = strategy.analyze_market(settings.BYBIT_SYMBOL, df, equity)
-            
-            # 6. Format Output & Act
-            # Get latest values for display
-            row = df.iloc[-1]
-            price = row['close']
-            ma200 = row['SMA_200']
-            trend_str = "вверх" if price > ma200 else "вниз"
-            
-            # Log Logic
-            if result.action == "HOLD":
-                state = strategy.get_position_state(settings.BYBIT_SYMBOL)
-                if not state.is_open:
-                    msg = (f"{settings.BYBIT_SYMBOL}: позиция отсутствует, сигналов нет, "
-                           f"тренд {trend_str}, цена {price:.2f}, MA200 {ma200:.2f}.")
-                    if result.reason != "No entry signal": # Don't spam standard msg if just no entry
-                         msg += f" (Info: {result.reason})"
-                    logger.info(msg)
-                else:
-                    # Holding a position
-                    msg = (f"{settings.BYBIT_SYMBOL}: позиция LONG удерживается. "
-                           f"Цена {price:.2f}, Stop {state.stop_price:.2f}. "
-                           f"HighestHigh7 {row['HighestHigh_7']:.2f}")
-                    logger.info(msg)
+            current_signal_row = df.iloc[-1]
+            signal = int(current_signal_row['signal'])
+            close_price = float(current_signal_row['close'])
 
-            elif result.action == "BUY":
-                msg = (f"{settings.BYBIT_SYMBOL}: сигнал BUY. "
-                       f"EntryPrice = {result.entry_price:.2f}, "
-                       f"stop_price = {result.stop_price:.2f}, "
-                       f"position_size = {result.position_size:.4f} (при риске {settings.RISK_PERCENT*100}% от депозита). "
-                       f"Причина: {result.reason}")
-                logger.info(msg)
-                
-                # Execute Logic
-                if settings.DRY_RUN:
-                    strategy.confirm_entry(settings.BYBIT_SYMBOL, result.entry_price, result.stop_price, result.position_size)
-                    logger.info("[DRY RUN] Position simulated OPEN.")
-                else:
-                    # Place REAL Order
-                    # Implementation of real order placement logic here
-                    pass
+            if controller.current_position:
+                controller._manage_open_position(current_signal_row, interval_mins)
+            elif signal != 0:
+                controller._execute_trade(
+                    signal,
+                    close_price,
+                    current_signal_row,
+                    symbol=settings.BYBIT_SYMBOL,
+                    strategy_name="single_symbol_strategy",
+                    execution_mode="live" if not settings.DRY_RUN else "paper",
+                    base_interval=settings.BYBIT_INTERVAL,
+                )
+            else:
+                logger.info("%s: no signal on latest closed candle.", settings.BYBIT_SYMBOL)
 
-            elif result.action == "SELL":
-                state = strategy.get_position_state(settings.BYBIT_SYMBOL)
-                msg = (f"{settings.BYBIT_SYMBOL}: сигнал SELL. "
-                       f"Причина: {result.reason}. "
-                       f"Текущая цена {price:.2f}, EntryPrice {state.entry_price:.2f}")
-                logger.info(msg)
-                
-                if settings.DRY_RUN:
-                    strategy.confirm_exit(settings.BYBIT_SYMBOL)
-                    logger.info("[DRY RUN] Position simulated CLOSED.")
-                else:
-                    # Place REAL Order
-                    pass
+            if controller.session:
+                controller.risk_manager.sync_from_api(controller.session)
 
-            # Sleep Logic
-            # For 1D candle, we usually check once a day or every hour to capture close? 
-            # Strategy says: "Entrance executes on Open of NEXT candle". 
-            # If we run continuously, we check "Has the daily candle just closed?"
-            # For this MVP, we sleep 5 minutes.
-            time.sleep(300) 
+            time.sleep(10)
 
         except Exception as e:
             logger.error(f"Error in main loop: {e}")

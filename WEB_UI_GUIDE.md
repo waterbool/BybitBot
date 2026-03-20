@@ -15,7 +15,7 @@ python web_ui.py
 ### 3. Access Dashboard
 Open your browser and navigate to:
 ```
-http://localhost:5000
+http://localhost:5001
 ```
 
 ## Features
@@ -87,7 +87,7 @@ http://localhost:5000
 
 **Can't access UI?**
 - Check if web_ui.py is running
-- Try http://127.0.0.1:5000 instead
+- Try http://127.0.0.1:5001 instead
 
 **Bot won't start?**
 - Check API keys in configuration

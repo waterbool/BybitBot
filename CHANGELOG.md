@@ -1,5 +1,19 @@
 # Changelog
 
+## Update v0.6.1 — 2026-03-20
+
+### English
+- Fixed the `TrendFollowingStrategy` 7-bar breakout logic to use previous completed candles, so pullback entries and impulse exits are no longer impossible.
+- Unified the single-symbol baseline pipeline across CLI, Web UI, and bot controller through a shared helper module for closed-candle preparation, indicators, ML filtering, and signal generation.
+- Removed the live scanner side effect that temporarily mutated global `ML_ENABLED`, reducing cross-request drift risk.
+- Updated repository docs and added a regression test for the corrected 7-bar level behavior.
+
+### Русский
+- Исправлена логика 7-свечных уровней в `TrendFollowingStrategy`: теперь используются предыдущие закрытые свечи, поэтому входы на pullback и impulse-exit больше не являются недостижимыми.
+- Выровнен single-symbol baseline pipeline между CLI, Web UI и контроллером бота через общий helper для закрытых свечей, индикаторов, ML-фильтра и генерации сигналов.
+- Убран побочный эффект live-scanner, который временно менял глобальный `ML_ENABLED`, что снижает риск дрейфа между параллельными запусками и запросами.
+- Обновлена документация репозитория и добавлен регрессионный тест для исправленного поведения 7-свечных уровней.
+
 ## Update v0.6.0 — 2026-03-17
 
 ### English

@@ -15,10 +15,7 @@ from datetime import datetime
 from bot_controller import BotController
 from config import settings
 from backtest.backtester import run_backtest
-from data_fetch.bybit_client import fetch_historical_klines
-from indicators.ta_module import add_indicators
-from strategy.rules import apply_strategy
-from ml.model import add_ml_probabilities
+from single_symbol_pipeline import fetch_price_frame_in_window, prepare_signal_frame
 
 # Initialize Flask app
 app = Flask(__name__, static_folder='static', template_folder='static')
@@ -100,21 +97,19 @@ def run_backtest_api():
         start_time = end_time - (days * 24 * 60 * 60 * 1000)
         
         logger.info(f"Running backtest for {days} days...")
-        df = fetch_historical_klines(settings.BYBIT_SYMBOL, settings.BYBIT_INTERVAL, start_time, end_time)
+        df, _interval_mins = fetch_price_frame_in_window(
+            symbol=settings.BYBIT_SYMBOL,
+            interval=settings.BYBIT_INTERVAL,
+            start_ts=start_time,
+            end_ts=end_time,
+            category=settings.BYBIT_CATEGORY,
+            now_ms=end_time,
+        )
         
         if df.empty:
             return jsonify({"success": False, "error": "No data fetched"}), 400
         
-        # Add indicators and strategy
-        df = add_indicators(
-            df,
-            ema_fast=settings.EMA_FAST,
-            ema_slow=settings.EMA_SLOW,
-            atr_period=settings.ATR_PERIOD
-        )
-        if getattr(settings, 'ML_ENABLED', False):
-            df = add_ml_probabilities(df)
-        df = apply_strategy(df)
+        chart_df = prepare_signal_frame(df)
         
         # Run backtest (strategy + ML + TP/SL)
         taker_fee_rate = float(params.get('taker_fee_rate', settings.BACKTEST_TAKER_FEE))
@@ -141,11 +136,11 @@ def run_backtest_api():
         
         # Prepare chart data
         chart_data = {
-            'timestamps': df['timestamp'].tail(100).tolist(),
-            'close': df['close'].tail(100).tolist(),
-            'ema_fast': df[f'EMA_{settings.EMA_FAST}'].tail(100).tolist() if f'EMA_{settings.EMA_FAST}' in df.columns else [],
-            'ema_slow': df[f'EMA_{settings.EMA_SLOW}'].tail(100).tolist() if f'EMA_{settings.EMA_SLOW}' in df.columns else [],
-            'signals': df['signal'].tail(100).tolist()
+            'timestamps': chart_df['timestamp'].tail(100).tolist(),
+            'close': chart_df['close'].tail(100).tolist(),
+            'ema_fast': chart_df[f'EMA_{settings.EMA_FAST}'].tail(100).tolist() if f'EMA_{settings.EMA_FAST}' in chart_df.columns else [],
+            'ema_slow': chart_df[f'EMA_{settings.EMA_SLOW}'].tail(100).tolist() if f'EMA_{settings.EMA_SLOW}' in chart_df.columns else [],
+            'signals': chart_df['signal'].tail(100).tolist()
         }
         
         # Prepare trades data

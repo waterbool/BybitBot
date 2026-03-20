@@ -1,88 +1,115 @@
-# Bybit ETHUSDT Algorithmic Trading Bot
+# Bybit Trading Bot
 
-This is a Python-based algorithmic trading bot for Bybit Futures (USDT Perpetual), specifically designed for `ETHUSDT`. It uses the `pybit` library for API interaction and `pandas`/`ta` for technical analysis.
+Python-проект для торговли и исследований по Bybit USDT Perpetual. В репозитории сейчас сосуществуют:
 
-## Features
+- активный live-стек с Flask UI, live-selector и paper/live execution;
+- исследовательский слой с мульти-символьными бэктестами и ранжированием стратегий;
+- legacy-модули от более ранней версии односигнального бота.
 
-- **Strategy**: EMA Crossover (Fast/Slow) with ATR-based Dynamic Stop Loss and Take Profit.
-- **Risk Management**: Fixed USDT position sizing (not margin, but total contract value).
-- **Mode**: Bybit Unified Trading Account (Linear Category).
-- **Environment**: Supports both Testnet (Demo) and Mainnet.
+## Актуальные точки входа
 
-## Project Structure
+- `main.py --mode live` — базовый CLI-режим live/paper для одного символа.
+- `main.py --mode backtest` — быстрый CLI smoke/backfill режим для загрузки данных и проверки сигналов.
+- `web_ui.py` — веб-интерфейс и REST/WebSocket API для настройки, бэктеста и управления ботом.
+- `scripts/run_strategy_backtests.py` — основной запуск мульти-стратегий и мульти-символьных бэктестов.
+- `scripts/run_portfolio_backtests.py` — портфельный отбор кандидатов по score/edge.
 
-- `main.py`: Entry point. Runs the trading loop.
-- `config.yaml`: Configuration (API keys, trading parameters).
-- `bybit_client.py`: Wrapper for Bybit API.
-- `indicators.py`: TA calculations (EMA, ATR).
-- `strategy.py`: Signal generation logic.
-- `risk.py`: Position sizing and precision handling.
-- `requirements.txt`: Python dependencies.
+## Структура репозитория
 
-## Installation
+- `config.yaml` — основной runtime-конфиг, включая API, риск, ML и live-selector.
+- `config/settings.py` — загрузка конфигурации и экспорт runtime settings.
+- `bot_controller.py` — orchestration для Web UI и live-selector.
+- `web_ui.py` — Flask + Socket.IO сервер.
+- `strategy/rules.py` — активные стратегии и фильтры.
+- `backtest/` — движок бэктеста, рыночные данные, multi-asset utilities, scoring.
+- `live/` — live scanner, trade gate, edge snapshot helpers.
+- `ml/` — ML features, model loading, training scripts.
+- `data_fetch/` — загрузка свечей, тикеров, funding, open interest.
+- `static/` — фронтенд веб-интерфейса.
 
-1. **Install Python 3.10+**.
-2. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Legacy-модули
 
-## Configuration
+Эти файлы остались от старой версии проекта и не являются главным active path:
 
-1. Open `config.yaml`.
-2. **Add your API Keys**:
-   - Go to [Bybit Testnet](https://testnet.bybit.com) (for demo) or Bybit Mainnet.
-   - Create API Keys with "Read-Write" permissions and "Contract - Orders/Positions" enabled.
-   - Initial setting is `testnet: true`. Change to `false` for real money.
-3. **Adjust Settings**:
-   - `max_leverage`: Default 10.
-   - `fixed_usdt_size`: Default 2.0 (The bot will buy ~2 USDT worth of ETH).
-   - `dry_run`: Set to `true` to Simulate orders (Logs only). Set to `false` for Real trading.
+- `strategy.py`
+- `indicators.py`
+- `risk.py`
+- `bybit_client.py`
+- `strategy/strategy.py`
 
-4. **Risk Management**:
-   - `max_trades_per_day`: Limit daily number of trades.
-   - `max_daily_loss_usdt`: Stop trading if daily loss exceeds this amount.
+## Установка
 
-## Safe Mode & Testing Workflow
-
-1. **Start with Testnet + Dry Run**:
-   - Set `api: testnet: true`
-   - Set `trading: dry_run: true`
-   - Run the bot. It will fetch data and Log "SIMULATED ORDER" without sending requests.
-
-2. **Testnet Real Execution**:
-   - Set `trading: dry_run: false`
-   - Verify orders appear in Bybit Testnet.
-
-3. **Live Trading**:
-   - Set `api: testnet: false` (Update API keys to Mainnet keys)
-   - Set `trading: dry_run: false`
-
-
-## Usage
-
-Run the bot from the terminal:
+1. Создай и активируй виртуальное окружение Python 3.10+.
+2. Установи зависимости:
 
 ```bash
-python main.py
+pip install -r requirements.txt
 ```
 
-The bot will:
-1. Connect to Bybit.
-2. Set your leverage.
-3. Fetch candle data every minute.
-4. Check for EMA crossovers.
-5. If a signal occurs and no position is open, it will place a Market Order with attached TP/SL.
+## Конфигурация
 
-## Strategy Details
+Основные параметры лежат в `config.yaml`.
 
-- **Entry**: 
-  - BUY if EMA(Fast) crosses *above* EMA(Slow).
-  - SELL if EMA(Fast) crosses *below* EMA(Slow).
-- **Exit**: 
-  - Take Profit: `Entry +/- (ATR * Multiplier * RewardRatio)`
-  - Stop Loss: `Entry +/- (ATR * Multiplier)`
+- `api.api_key` / `api.api_secret` — ключи Bybit.
+- `api.testnet` — `true` для тестовой среды.
+- `trading.dry_run` — paper mode без реальных ордеров.
+- `live_selector.enabled` — включает multi-symbol selector.
+- `live_selector.execution_mode` — `paper` или `live`.
+
+Сейчас секреты хранятся прямо в `config.yaml`, поэтому не коммить реальные ключи.
+
+## Запуск
+
+CLI live/paper:
+
+```bash
+python main.py --mode live
+```
+
+CLI backtest smoke:
+
+```bash
+python main.py --mode backtest
+```
+
+Web UI:
+
+```bash
+python web_ui.py
+```
+
+После запуска Web UI доступен по адресу:
+
+```text
+http://localhost:5001
+```
+
+## Полезные команды
+
+Мульти-стратегийный бэктест:
+
+```bash
+python scripts/run_strategy_backtests.py --help
+```
+
+Портфельный бэктест:
+
+```bash
+python scripts/run_portfolio_backtests.py --help
+```
+
+Обучение ML-модели:
+
+```bash
+python ml/train.py
+```
+
+## Важные замечания
+
+- `main.py --mode backtest` не заменяет полноценные исследовательские скрипты из `scripts/`.
+- В проекте есть смешение active и legacy-кода, поэтому перед изменениями лучше ориентироваться на `bot_controller.py`, `strategy/rules.py`, `backtest/` и `live/`.
+- Начинай с `testnet: true` и `dry_run: true`.
 
 ## Disclaimer
 
-This software is for educational purposes. Trading futures involves high risk. Use Testnet first!
+Торговля фьючерсами несет высокий риск. Сначала проверяй конфигурацию, paper mode и testnet.

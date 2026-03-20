@@ -10,30 +10,23 @@ from queue import Queue
 import pandas as pd
 
 from config import settings
-from data_fetch.bybit_client import fetch_historical_klines
-from indicators.ta_module import add_indicators
-from strategy.rules import apply_strategy
-from ml.model import add_ml_probabilities
 from live.edge_snapshot import load_edge_snapshot, snapshot_is_fresh, snapshot_age_minutes
 from live.scanner import scan_live_candidates
 from live.trade_gate import evaluate_trade_gate
 from risk.risk import RiskManager
 from pybit.unified_trading import HTTP
+from single_symbol_pipeline import (
+    fetch_indicator_frame_for_lookback,
+    fetch_signal_frame_for_lookback,
+    interval_to_minutes as _shared_interval_to_minutes,
+    required_history_bars,
+)
 
 logger = logging.getLogger(__name__)
 
 def _interval_to_minutes(interval_value: str) -> int:
-    """Convert Bybit interval string to minutes (e.g. '1', '60', 'D', '1D')."""
-    s = str(interval_value).strip().upper()
-    if s.isdigit():
-        return int(s)
-    if s.endswith('D'):
-        days = s[:-1]
-        if days == "":
-            return 1440
-        if days.isdigit():
-            return int(days) * 1440
-    raise ValueError(f"Unsupported interval format: {interval_value}")
+    """Compatibility wrapper around the shared baseline interval parser."""
+    return _shared_interval_to_minutes(interval_value)
 
 
 class BotController:
@@ -413,21 +406,15 @@ class BotController:
         return snapshot
 
     def _fetch_latest_closed_row(self, symbol: str, interval: str, lookback_bars: int = 250) -> tuple[Optional[pd.Series], int]:
-        interval_mins = _interval_to_minutes(interval)
-        now = int(time.time() * 1000)
-        start_ts = now - ((lookback_bars + 3) * interval_mins * 60 * 1000)
-        df = fetch_historical_klines(symbol, interval, start_ts, now, category=settings.BYBIT_CATEGORY)
-        current_open_ts = (now // (interval_mins * 60 * 1000)) * (interval_mins * 60 * 1000)
-        df = df[df["timestamp"] < current_open_ts].copy()
+        df, interval_mins = fetch_indicator_frame_for_lookback(
+            symbol=symbol,
+            interval=interval,
+            lookback_bars=lookback_bars,
+            category=settings.BYBIT_CATEGORY,
+        )
         if df.empty:
             return None, interval_mins
         df = df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp")
-        df = add_indicators(
-            df,
-            ema_fast=settings.EMA_FAST,
-            ema_slow=settings.EMA_SLOW,
-            atr_period=settings.ATR_PERIOD,
-        )
         return df.iloc[-1], interval_mins
 
     def _selector_execution_mode(self) -> str:
@@ -572,46 +559,25 @@ class BotController:
                         self._run_live_selector_cycle()
                         time.sleep(max(5, int(getattr(settings, "LIVE_SELECTOR_SCAN_INTERVAL_SECONDS", 30))))
                     else:
-                        # Fetch data
-                        now = int(time.time() * 1000)
                         try:
                             interval_mins = _interval_to_minutes(settings.BYBIT_INTERVAL)
                         except ValueError as e:
                             logger.error(str(e))
                             time.sleep(60)
                             continue
-                        ml_min_bars = int(getattr(settings, 'ML_MIN_TRAIN_SAMPLES', 300)) + int(getattr(settings, 'ML_HORIZON', 12)) + 50
-                        min_bars = max(200, ml_min_bars)
-                        lookback_mins = min_bars * interval_mins
-                        start_ts = now - (lookback_mins * 60 * 1000)
-                        
-                        df = fetch_historical_klines(
-                            settings.BYBIT_SYMBOL,
-                            settings.BYBIT_INTERVAL,
-                            start_ts,
-                            now,
+                        min_bars = required_history_bars()
+
+                        df, interval_mins = fetch_signal_frame_for_lookback(
+                            symbol=settings.BYBIT_SYMBOL,
+                            interval=settings.BYBIT_INTERVAL,
+                            lookback_bars=min_bars,
                             category=settings.BYBIT_CATEGORY,
                         )
-                        current_open_ts = (now // (interval_mins * 60 * 1000)) * (interval_mins * 60 * 1000)
-                        df = df[df["timestamp"] < current_open_ts].copy()
-
-                        if len(df) < min_bars:
+                        if df.empty or len(df) < min_bars:
                             logger.warning(f"Not enough data ({len(df)}/{min_bars} bars). Waiting...")
                             time.sleep(10)
                             continue
-                        
-                        # Add indicators and apply strategy
-                        df = add_indicators(
-                            df,
-                            ema_fast=settings.EMA_FAST,
-                            ema_slow=settings.EMA_SLOW,
-                            atr_period=settings.ATR_PERIOD
-                        )
-                        # ML probabilities (used as a filter in strategy rules)
-                        if getattr(settings, 'ML_ENABLED', False):
-                            df = add_ml_probabilities(df)
-                        df = apply_strategy(df)
-                        
+
                         # Check signal
                         current_signal_row = df.iloc[-1]
                         signal = current_signal_row['signal']

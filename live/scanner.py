@@ -16,6 +16,7 @@ from data_fetch.bybit_client import (
 from indicators.ta_module import add_indicators
 from live.edge_snapshot import build_edge_lookup
 from ml.model import add_ml_probabilities
+from strategy.rules import apply_strategy as apply_baseline_strategy
 
 
 def _interval_to_ms(interval: str) -> int:
@@ -165,63 +166,62 @@ def scan_live_candidates(
     edge_lookup = build_edge_lookup(edge_snapshot)
     specs = resolve_strategy_specs(strategy_names or settings.LIVE_SELECTOR_STRATEGIES)
     candidates: list[LiveCandidate] = []
+    use_ml_filter = bool(settings.LIVE_SELECTOR_USE_ML)
 
-    original_ml_enabled = settings.ML_ENABLED
-    settings.ML_ENABLED = bool(settings.LIVE_SELECTOR_USE_ML)
-    try:
-        for symbol in symbols:
-            for spec in specs:
-                frame = _build_strategy_frame(symbol, spec.name, spec.indicator_overrides, now_ms)
-                if frame.empty:
-                    continue
-                working = frame.copy()
-                if settings.LIVE_SELECTOR_USE_ML:
-                    working = add_ml_probabilities(working)
+    for symbol in symbols:
+        for spec in specs:
+            frame = _build_strategy_frame(symbol, spec.name, spec.indicator_overrides, now_ms)
+            if frame.empty:
+                continue
+            working = frame.copy()
+            if use_ml_filter:
+                working = add_ml_probabilities(working)
+            if spec.strategy_fn is apply_baseline_strategy:
+                signal_df = spec.strategy_fn(working.copy(), ml_enabled=use_ml_filter)
+            else:
                 signal_df = spec.strategy_fn(working.copy())
-                signal = int(signal_df.iloc[-1]["signal"])
-                if signal == 0:
-                    continue
+            signal = int(signal_df.iloc[-1]["signal"])
+            if signal == 0:
+                continue
 
-                score_payload = compute_signal_score(signal_df, signal)
-                signal_score = float(score_payload.get("score", 0.0) or 0.0)
+            score_payload = compute_signal_score(signal_df, signal)
+            signal_score = float(score_payload.get("score", 0.0) or 0.0)
 
-                edge_row = edge_lookup.get((symbol, spec.name), {})
-                edge_score = float(edge_row.get("edge_score", 0.0) or 0.0)
+            edge_row = edge_lookup.get((symbol, spec.name), {})
+            edge_score = float(edge_row.get("edge_score", 0.0) or 0.0)
 
-                total_weight = float(settings.LIVE_SELECTOR_SIGNAL_WEIGHT) + float(settings.LIVE_SELECTOR_EDGE_WEIGHT)
-                if total_weight <= 0:
-                    total_weight = 1.0
-                selection_score = (
-                    (signal_score * float(settings.LIVE_SELECTOR_SIGNAL_WEIGHT)) +
-                    (edge_score * float(settings.LIVE_SELECTOR_EDGE_WEIGHT))
-                ) / total_weight
+            total_weight = float(settings.LIVE_SELECTOR_SIGNAL_WEIGHT) + float(settings.LIVE_SELECTOR_EDGE_WEIGHT)
+            if total_weight <= 0:
+                total_weight = 1.0
+            selection_score = (
+                (signal_score * float(settings.LIVE_SELECTOR_SIGNAL_WEIGHT)) +
+                (edge_score * float(settings.LIVE_SELECTOR_EDGE_WEIGHT))
+            ) / total_weight
 
-                last_row = signal_df.iloc[-1]
-                row_payload = last_row.to_dict()
-                if hasattr(last_row.name, "timestamp"):
-                    row_payload["timestamp_ms"] = int(last_row.name.timestamp() * 1000)
-                    row_payload["timestamp"] = last_row.name.isoformat()
-                else:
-                    row_payload["timestamp"] = str(last_row.name)
+            last_row = signal_df.iloc[-1]
+            row_payload = last_row.to_dict()
+            if hasattr(last_row.name, "timestamp"):
+                row_payload["timestamp_ms"] = int(last_row.name.timestamp() * 1000)
+                row_payload["timestamp"] = last_row.name.isoformat()
+            else:
+                row_payload["timestamp"] = str(last_row.name)
 
-                candidates.append(
-                    LiveCandidate(
-                        symbol=symbol,
-                        strategy_name=spec.name,
-                        side=signal,
-                        signal_time=last_row.name.isoformat(),
-                        close_price=float(last_row["close"]),
-                        signal_score=round(signal_score, 6),
-                        edge_score=round(edge_score, 6),
-                        selection_score=round(selection_score, 6),
-                        signal_components=score_payload.get("components", {}) or {},
-                        edge_components=edge_row,
-                        signal_row=row_payload,
-                        base_interval=settings.LIVE_SELECTOR_BASE_INTERVAL,
-                    )
+            candidates.append(
+                LiveCandidate(
+                    symbol=symbol,
+                    strategy_name=spec.name,
+                    side=signal,
+                    signal_time=last_row.name.isoformat(),
+                    close_price=float(last_row["close"]),
+                    signal_score=round(signal_score, 6),
+                    edge_score=round(edge_score, 6),
+                    selection_score=round(selection_score, 6),
+                    signal_components=score_payload.get("components", {}) or {},
+                    edge_components=edge_row,
+                    signal_row=row_payload,
+                    base_interval=settings.LIVE_SELECTOR_BASE_INTERVAL,
                 )
-    finally:
-        settings.ML_ENABLED = original_ml_enabled
+            )
 
     candidates.sort(
         key=lambda item: (
