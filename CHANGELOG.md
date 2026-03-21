@@ -1,5 +1,17 @@
 # Changelog
 
+## Update v0.6.2 — 2026-03-21
+
+### English
+- Added a robust configuration search runner that evaluates randomized presets across multiple symbols and rolling validation windows.
+- Added saved preset storage for the three selected candidate variants and a dedicated rerun script for repeatable comparisons.
+- Improved `signal_score` so rescoring stays consistent when ATR, RSI, and Bollinger periods are tuned during variant search and replay.
+
+### Русский
+- Добавлен раннер robust-поиска конфигураций, который проверяет случайные пресеты по нескольким символам и rolling-окнам валидации.
+- Добавлено сохранение трёх выбранных candidate-вариантов и отдельный скрипт для их повторного прогона и воспроизводимого сравнения.
+- Улучшен `signal_score`: теперь пересчёт корректно учитывает тюнингованные периоды ATR, RSI и Bollinger при поиске и повторном прогоне вариантов.
+
 ## Update v0.6.1 — 2026-03-20
 
 ### English

@@ -22,6 +22,14 @@ def _safe_ratio(numerator: Any, denominator: Any) -> float | None:
     return numerator / denominator
 
 
+def _first_available(row: pd.Series, candidates: list[str]) -> Any:
+    for column in candidates:
+        value = row.get(column)
+        if value is not None and not pd.isna(value):
+            return value
+    return None
+
+
 def compute_signal_score(df: pd.DataFrame, signal: int) -> dict:
     if df.empty or signal == 0:
         return {"score": 0.0, "components": {}}
@@ -31,9 +39,8 @@ def compute_signal_score(df: pd.DataFrame, signal: int) -> dict:
     components: dict[str, float] = {}
 
     close = row.get("close")
-    atr = row.get("ATR_14")
-    if pd.isna(atr) if atr is not None else True:
-        atr = row.get(f"ATR_{settings.ATR_PERIOD}")
+    scoring_atr_period = int(getattr(settings, "SCORING_ATR_PERIOD", getattr(settings, "ATR_PERIOD", 14)))
+    atr = _first_available(row, [f"ATR_{scoring_atr_period}", "ATR_14", f"ATR_{settings.ATR_PERIOD}"])
     atr_pct = _safe_ratio(atr, close)
     if atr_pct is not None:
         baseline = max(float(getattr(settings, "MIN_ATR_THRESHOLD", 0.0015)), 1e-6)
@@ -66,15 +73,17 @@ def compute_signal_score(df: pd.DataFrame, signal: int) -> dict:
             impulse_baseline = max(float(getattr(settings, "IMPULSE_THRESHOLD", 0.002)), 1e-6)
             components["impulse"] = _clip01(ret1 / (impulse_baseline * 2.0))
 
-    rsi14 = row.get("RSI_14")
-    if rsi14 is not None and not pd.isna(rsi14):
+    scoring_rsi_period = int(getattr(settings, "SCORING_RSI_PERIOD", 14))
+    rsi_value = _first_available(row, [f"RSI_{scoring_rsi_period}", "RSI_14"])
+    if rsi_value is not None and not pd.isna(rsi_value):
         if signal == 1:
-            components["rsi"] = _clip01((50.0 - float(rsi14)) / 25.0)
+            components["rsi"] = _clip01((50.0 - float(rsi_value)) / 25.0)
         else:
-            components["rsi"] = _clip01((float(rsi14) - 50.0) / 25.0)
+            components["rsi"] = _clip01((float(rsi_value) - 50.0) / 25.0)
 
-    bb_lower = row.get("BB_LOWER_20")
-    bb_upper = row.get("BB_UPPER_20")
+    scoring_bb_period = int(getattr(settings, "SCORING_BB_PERIOD", 20))
+    bb_lower = _first_available(row, [f"BB_LOWER_{scoring_bb_period}", "BB_LOWER_20"])
+    bb_upper = _first_available(row, [f"BB_UPPER_{scoring_bb_period}", "BB_UPPER_20"])
     if close is not None and not pd.isna(close):
         close_f = float(close)
         if signal == 1 and bb_lower is not None and not pd.isna(bb_lower):
