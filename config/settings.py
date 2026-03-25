@@ -8,7 +8,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --- Load Config from YAML ---
-CONFIG_PATH = BASE_DIR / "config.yaml"
+CONFIG_PATH = Path(os.getenv("BYBIT_BOT_CONFIG_PATH", BASE_DIR / "config.yaml"))
 
 def load_config():
     if not CONFIG_PATH.exists():
@@ -38,10 +38,39 @@ def _ensure_string_list(value, fallback: list[str]) -> list[str]:
         return cleaned or list(fallback)
     return list(fallback)
 
+
+def _env_str(name: str, default):
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    return value
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return bool(default)
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return int(default)
+    return int(value)
+
+
+def _env_float(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return float(default)
+    return float(value)
+
 # --- Bybit Config ---
-BYBIT_API_KEY = config.get("api", {}).get("api_key")
-BYBIT_API_SECRET = config.get("api", {}).get("api_secret")
-BYBIT_TESTNET = config.get("api", {}).get("testnet", True)
+BYBIT_API_KEY = _env_str("BYBIT_API_KEY", config.get("api", {}).get("api_key"))
+BYBIT_API_SECRET = _env_str("BYBIT_API_SECRET", config.get("api", {}).get("api_secret"))
+BYBIT_TESTNET = _env_bool("BYBIT_TESTNET", config.get("api", {}).get("testnet", True))
+BYBIT_DEMO = _env_bool("BYBIT_DEMO", config.get("api", {}).get("demo", False))
 
 BYBIT_SYMBOL = config.get("trading", {}).get("symbol", "ETHUSDT")
 BYBIT_CATEGORY = config.get("trading", {}).get("category", "linear")
@@ -54,10 +83,13 @@ EMA_FAST = config.get("strategy", {}).get("ema_fast", 9)
 EMA_SLOW = config.get("strategy", {}).get("ema_slow", 21)
 
 # Updated for Trend Strategy: ATR(20)
-ATR_PERIOD = config.get("strategy", {}).get("atr_period", 20) 
+ATR_PERIOD = _env_int("ATR_PERIOD", config.get("strategy", {}).get("atr_period", 20))
 
-RISK_REWARD_RATIO = config.get("strategy", {}).get("risk_reward_ratio", 1.5)
-SL_ATR_MULTIPLIER = config.get("strategy", {}).get("sl_atr_multiplier", 2.0)
+RISK_REWARD_RATIO = _env_float("RISK_REWARD_RATIO", config.get("strategy", {}).get("risk_reward_ratio", 1.5))
+SL_ATR_MULTIPLIER = _env_float(
+    "SL_ATR_MULT",
+    _env_float("SL_ATR_MULTIPLIER", config.get("strategy", {}).get("sl_atr_multiplier", 2.0)),
+)
 VOLUME_MULTIPLIER = float(config.get("strategy", {}).get("volume_multiplier", 1.2))
 VOLUME_MA_PERIOD = int(config.get("strategy", {}).get("volume_ma_period", 20)) 
 LEVELS_LOOKBACK = config.get("strategy", {}).get("levels_lookback", 10)
@@ -65,27 +97,32 @@ MIN_ATR_THRESHOLD = float(config.get("strategy", {}).get("min_atr_threshold", 0.
 IMPULSE_THRESHOLD = float(config.get("strategy", {}).get("impulse_threshold", 0.002))
 COOLDOWN_CANDLES = int(config.get("strategy", {}).get("cooldown_candles", 4))
 risk_mgmt_cfg = config.get("risk_management", {})
-PARTIAL_TP_ENABLED = bool(risk_mgmt_cfg.get("partial_tp_enabled", True))
-PARTIAL_TP_ATR_MULT = float(
-    risk_mgmt_cfg.get("partial_tp_atr_mult", config.get("strategy", {}).get("tp1_atr_mult", 1.0))
+PARTIAL_TP_ENABLED = _env_bool("PARTIAL_TP_ENABLED", bool(risk_mgmt_cfg.get("partial_tp_enabled", True)))
+PARTIAL_TP_ATR_MULT = _env_float(
+    "PARTIAL_TP_ATR_MULT",
+    risk_mgmt_cfg.get("partial_tp_atr_mult", config.get("strategy", {}).get("tp1_atr_mult", 1.0)),
 )
-PARTIAL_TP_FRACTION = float(
-    risk_mgmt_cfg.get("partial_tp_fraction", config.get("strategy", {}).get("tp1_partial_pct", 0.5))
+PARTIAL_TP_FRACTION = _env_float(
+    "PARTIAL_TP_FRACTION",
+    risk_mgmt_cfg.get("partial_tp_fraction", config.get("strategy", {}).get("tp1_partial_pct", 0.5)),
 )
-BE_ENABLED = bool(risk_mgmt_cfg.get("be_enabled", True))
-BE_BUFFER_BPS = float(risk_mgmt_cfg.get("be_buffer_bps", 2))
-TRAILING_ENABLED = bool(risk_mgmt_cfg.get("trailing_enabled", True))
-TRAIL_ATR_MULT = float(
-    risk_mgmt_cfg.get("trail_atr_mult", config.get("strategy", {}).get("trail_atr_mult", 1.5))
+BE_ENABLED = _env_bool("BE_ENABLED", bool(risk_mgmt_cfg.get("be_enabled", True)))
+BE_BUFFER_BPS = _env_float("BE_BUFFER_BPS", risk_mgmt_cfg.get("be_buffer_bps", 2))
+TRAILING_ENABLED = _env_bool("TRAILING_ENABLED", bool(risk_mgmt_cfg.get("trailing_enabled", True)))
+TRAIL_ATR_MULT = _env_float(
+    "TRAIL_ATR_MULT",
+    risk_mgmt_cfg.get("trail_atr_mult", config.get("strategy", {}).get("trail_atr_mult", 1.5)),
 )
-TRAIL_ACTIVATE_ATR = float(
-    risk_mgmt_cfg.get("trail_activation_atr", config.get("strategy", {}).get("trail_activate_atr", 1.0))
+TRAIL_ACTIVATE_ATR = _env_float(
+    "TRAIL_ACTIVATE_ATR",
+    risk_mgmt_cfg.get("trail_activation_atr", config.get("strategy", {}).get("trail_activate_atr", 1.0)),
 )
-TIME_STOP_ENABLED = bool(risk_mgmt_cfg.get("time_stop_enabled", True))
-TIME_STOP_CANDLES = int(
-    risk_mgmt_cfg.get("time_stop_candles", config.get("strategy", {}).get("time_stop_candles", 24))
+TIME_STOP_ENABLED = _env_bool("TIME_STOP_ENABLED", bool(risk_mgmt_cfg.get("time_stop_enabled", True)))
+TIME_STOP_CANDLES = _env_int(
+    "TIME_STOP_CANDLES",
+    risk_mgmt_cfg.get("time_stop_candles", config.get("strategy", {}).get("time_stop_candles", 24)),
 )
-PREFER_WORST_CASE = bool(risk_mgmt_cfg.get("prefer_worst_case", True))
+PREFER_WORST_CASE = _env_bool("PREFER_WORST_CASE", bool(risk_mgmt_cfg.get("prefer_worst_case", True)))
 
 # Backward-compatible aliases
 TP1_ATR_MULT = PARTIAL_TP_ATR_MULT
@@ -123,8 +160,14 @@ RISK_PERCENT = config.get("risk", {}).get("risk_percent", 0.01) # 1% default
 TRADING_START_HOUR = int(config.get('strategy', {}).get('trading_start_hour', 0))
 TRADING_END_HOUR = int(config.get('strategy', {}).get('trading_end_hour', 24))
 
-FIXED_USDT_SIZE = config.get("trading", {}).get("fixed_usdt_size", 2.0)
-DRY_RUN = config.get("trading", {}).get("dry_run", True)
+FIXED_USDT_SIZE = _env_float("FIXED_USDT_SIZE", config.get("trading", {}).get("fixed_usdt_size", 2.0))
+DRY_RUN = _env_bool("DRY_RUN", config.get("trading", {}).get("dry_run", True))
+
+# --- Strategy Variant Overrides ---
+FUNDING_EXTREME_LONG_THRESHOLD = _env_float("FUNDING_EXTREME_LONG_THRESHOLD", -0.00007)
+FUNDING_EXTREME_SHORT_THRESHOLD = _env_float("FUNDING_EXTREME_SHORT_THRESHOLD", 0.00007)
+FUNDING_EXTREME_MIN_OI_CHANGE = _env_float("FUNDING_EXTREME_MIN_OI_CHANGE", 0.0)
+FUNDING_EXTREME_MIN_PRICE_MOVE = _env_float("FUNDING_EXTREME_MIN_PRICE_MOVE", 0.0)
 
 # --- Risk Management ---
 MAX_TRADES_PER_DAY = config.get("risk", {}).get("max_trades_per_day", 10)
@@ -140,39 +183,40 @@ BACKTEST_EXECUTION_DELAY_CANDLES = int(backtest_cfg.get("execution_delay_candles
 
 # --- Live Multi-Symbol Selector ---
 live_selector_cfg = config.get("live_selector", {})
-LIVE_SELECTOR_ENABLED = bool(live_selector_cfg.get("enabled", False))
-LIVE_SELECTOR_SYMBOLS = _ensure_symbol_list(live_selector_cfg.get("symbols"), BYBIT_SYMBOL)
+LIVE_SELECTOR_ENABLED = _env_bool("LIVE_SELECTOR_ENABLED", bool(live_selector_cfg.get("enabled", False)))
+LIVE_SELECTOR_SYMBOLS = _ensure_symbol_list(_env_str("LIVE_SELECTOR_SYMBOLS", live_selector_cfg.get("symbols")), BYBIT_SYMBOL)
 LIVE_SELECTOR_STRATEGIES = _ensure_string_list(
-    live_selector_cfg.get("strategies"),
+    _env_str("LIVE_SELECTOR_STRATEGIES", live_selector_cfg.get("strategies")),
     ["ema_crossover_baseline", "funding_extreme_reversal"],
 )
-LIVE_SELECTOR_EXECUTION_MODE = str(live_selector_cfg.get("execution_mode", "paper")).strip().lower()
+LIVE_SELECTOR_EXECUTION_MODE = str(_env_str("LIVE_SELECTOR_EXECUTION_MODE", live_selector_cfg.get("execution_mode", "paper"))).strip().lower()
 if LIVE_SELECTOR_EXECUTION_MODE not in {"paper", "live"}:
     LIVE_SELECTOR_EXECUTION_MODE = "paper"
-LIVE_SELECTOR_EDGE_SNAPSHOT_PATH = str(
-    live_selector_cfg.get("edge_snapshot_path", BASE_DIR / "reports" / "live_edge_snapshot.json")
-)
-LIVE_SELECTOR_EDGE_LOOKBACK_DAYS = int(live_selector_cfg.get("edge_lookback_days", 90))
-LIVE_SELECTOR_EDGE_MAX_AGE_MINUTES = int(live_selector_cfg.get("edge_max_age_minutes", 24 * 60))
-LIVE_SELECTOR_REQUIRE_EDGE_SNAPSHOT = bool(live_selector_cfg.get("require_edge_snapshot", True))
-LIVE_SELECTOR_USE_ML = bool(live_selector_cfg.get("use_ml", False))
-LIVE_SELECTOR_SIGNAL_WEIGHT = float(live_selector_cfg.get("signal_weight", 0.4))
-LIVE_SELECTOR_EDGE_WEIGHT = float(live_selector_cfg.get("edge_weight", 0.6))
-LIVE_SELECTOR_MIN_SIGNAL_SCORE = float(live_selector_cfg.get("min_signal_score", 0.60))
-LIVE_SELECTOR_MIN_EDGE_SCORE = float(live_selector_cfg.get("min_edge_score", 0.55))
-LIVE_SELECTOR_MAX_NEW_TRADES_PER_DAY = int(live_selector_cfg.get("max_new_trades_per_day", 2))
-LIVE_SELECTOR_MAX_PER_SYMBOL_PER_DAY = int(live_selector_cfg.get("max_per_symbol_per_day", 1))
-LIVE_SELECTOR_MAX_PER_STRATEGY_PER_DAY = int(live_selector_cfg.get("max_per_strategy_per_day", 1))
-LIVE_SELECTOR_MAX_POSITIONS_TOTAL = int(live_selector_cfg.get("max_positions_total", 1))
-LIVE_SELECTOR_MAX_POSITIONS_PER_SYMBOL = int(live_selector_cfg.get("max_positions_per_symbol", 1))
-LIVE_SELECTOR_MAX_POSITIONS_PER_STRATEGY = int(live_selector_cfg.get("max_positions_per_strategy", 1))
-LIVE_SELECTOR_BASE_INTERVAL = str(live_selector_cfg.get("base_interval", "15"))
-LIVE_SELECTOR_HTF_INTERVAL = str(live_selector_cfg.get("htf_interval", "60"))
-LIVE_SELECTOR_BASE_LOOKBACK_BARS = int(live_selector_cfg.get("base_lookback_bars", 500))
-LIVE_SELECTOR_HTF_LOOKBACK_BARS = int(live_selector_cfg.get("htf_lookback_bars", 260))
-LIVE_SELECTOR_STALE_DATA_MINUTES = int(live_selector_cfg.get("stale_data_minutes", 45))
-LIVE_SELECTOR_MAX_SPREAD_BPS = float(live_selector_cfg.get("max_spread_bps", 8.0))
-LIVE_SELECTOR_SCAN_INTERVAL_SECONDS = int(live_selector_cfg.get("scan_interval_seconds", 30))
+LIVE_SELECTOR_EDGE_SNAPSHOT_PATH = str(_env_str(
+    "LIVE_SELECTOR_EDGE_SNAPSHOT_PATH",
+    live_selector_cfg.get("edge_snapshot_path", BASE_DIR / "reports" / "live_edge_snapshot.json"),
+))
+LIVE_SELECTOR_EDGE_LOOKBACK_DAYS = _env_int("LIVE_SELECTOR_EDGE_LOOKBACK_DAYS", live_selector_cfg.get("edge_lookback_days", 90))
+LIVE_SELECTOR_EDGE_MAX_AGE_MINUTES = _env_int("LIVE_SELECTOR_EDGE_MAX_AGE_MINUTES", live_selector_cfg.get("edge_max_age_minutes", 24 * 60))
+LIVE_SELECTOR_REQUIRE_EDGE_SNAPSHOT = _env_bool("LIVE_SELECTOR_REQUIRE_EDGE_SNAPSHOT", bool(live_selector_cfg.get("require_edge_snapshot", True)))
+LIVE_SELECTOR_USE_ML = _env_bool("LIVE_SELECTOR_USE_ML", bool(live_selector_cfg.get("use_ml", False)))
+LIVE_SELECTOR_SIGNAL_WEIGHT = _env_float("LIVE_SELECTOR_SIGNAL_WEIGHT", live_selector_cfg.get("signal_weight", 0.4))
+LIVE_SELECTOR_EDGE_WEIGHT = _env_float("LIVE_SELECTOR_EDGE_WEIGHT", live_selector_cfg.get("edge_weight", 0.6))
+LIVE_SELECTOR_MIN_SIGNAL_SCORE = _env_float("LIVE_SELECTOR_MIN_SIGNAL_SCORE", live_selector_cfg.get("min_signal_score", 0.60))
+LIVE_SELECTOR_MIN_EDGE_SCORE = _env_float("LIVE_SELECTOR_MIN_EDGE_SCORE", live_selector_cfg.get("min_edge_score", 0.55))
+LIVE_SELECTOR_MAX_NEW_TRADES_PER_DAY = _env_int("LIVE_SELECTOR_MAX_NEW_TRADES_PER_DAY", live_selector_cfg.get("max_new_trades_per_day", 2))
+LIVE_SELECTOR_MAX_PER_SYMBOL_PER_DAY = _env_int("LIVE_SELECTOR_MAX_PER_SYMBOL_PER_DAY", live_selector_cfg.get("max_per_symbol_per_day", 1))
+LIVE_SELECTOR_MAX_PER_STRATEGY_PER_DAY = _env_int("LIVE_SELECTOR_MAX_PER_STRATEGY_PER_DAY", live_selector_cfg.get("max_per_strategy_per_day", 1))
+LIVE_SELECTOR_MAX_POSITIONS_TOTAL = _env_int("LIVE_SELECTOR_MAX_POSITIONS_TOTAL", live_selector_cfg.get("max_positions_total", 1))
+LIVE_SELECTOR_MAX_POSITIONS_PER_SYMBOL = _env_int("LIVE_SELECTOR_MAX_POSITIONS_PER_SYMBOL", live_selector_cfg.get("max_positions_per_symbol", 1))
+LIVE_SELECTOR_MAX_POSITIONS_PER_STRATEGY = _env_int("LIVE_SELECTOR_MAX_POSITIONS_PER_STRATEGY", live_selector_cfg.get("max_positions_per_strategy", 1))
+LIVE_SELECTOR_BASE_INTERVAL = str(_env_str("LIVE_SELECTOR_BASE_INTERVAL", live_selector_cfg.get("base_interval", "15")))
+LIVE_SELECTOR_HTF_INTERVAL = str(_env_str("LIVE_SELECTOR_HTF_INTERVAL", live_selector_cfg.get("htf_interval", "60")))
+LIVE_SELECTOR_BASE_LOOKBACK_BARS = _env_int("LIVE_SELECTOR_BASE_LOOKBACK_BARS", live_selector_cfg.get("base_lookback_bars", 500))
+LIVE_SELECTOR_HTF_LOOKBACK_BARS = _env_int("LIVE_SELECTOR_HTF_LOOKBACK_BARS", live_selector_cfg.get("htf_lookback_bars", 260))
+LIVE_SELECTOR_STALE_DATA_MINUTES = _env_int("LIVE_SELECTOR_STALE_DATA_MINUTES", live_selector_cfg.get("stale_data_minutes", 45))
+LIVE_SELECTOR_MAX_SPREAD_BPS = _env_float("LIVE_SELECTOR_MAX_SPREAD_BPS", live_selector_cfg.get("max_spread_bps", 8.0))
+LIVE_SELECTOR_SCAN_INTERVAL_SECONDS = _env_int("LIVE_SELECTOR_SCAN_INTERVAL_SECONDS", live_selector_cfg.get("scan_interval_seconds", 30))
 
 
 # --- Binarium Config (Legacy/Hybrid) ---

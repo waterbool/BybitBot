@@ -376,6 +376,7 @@ class BotController:
                 "symbols": getattr(settings, "LIVE_SELECTOR_SYMBOLS", [settings.BYBIT_SYMBOL]),
                 "dry_run": settings.DRY_RUN,
                 "testnet": settings.BYBIT_TESTNET,
+                "demo": getattr(settings, "BYBIT_DEMO", False),
                 "timeframe": settings.BYBIT_INTERVAL,
                 "live_selector_enabled": getattr(settings, "LIVE_SELECTOR_ENABLED", False),
                 "live_selector_mode": getattr(settings, "LIVE_SELECTOR_EXECUTION_MODE", "paper"),
@@ -535,6 +536,7 @@ class BotController:
 
                 self.session = HTTP(
                     testnet=settings.BYBIT_TESTNET,
+                    demo=getattr(settings, "BYBIT_DEMO", False),
                     api_key=settings.BYBIT_API_KEY,
                     api_secret=settings.BYBIT_API_SECRET
                 )

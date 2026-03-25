@@ -7,17 +7,18 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 class BybitClient:
-    def __init__(self, api_key: str, api_secret: str, testnet: bool = True):
+    def __init__(self, api_key: str, api_secret: str, testnet: bool = True, demo: bool = False):
         """
         Initialize the Bybit HTTP session.
         """
         try:
             self.session = HTTP(
                 testnet=testnet,
+                demo=demo,
                 api_key=api_key,
                 api_secret=api_secret,
             )
-            logger.info(f"Bybit Client initialized (Testnet: {testnet})")
+            logger.info(f"Bybit Client initialized (Testnet: {testnet}, Demo: {demo})")
         except Exception as e:
             logger.error(f"Failed to initialize Bybit Client: {e}")
             raise

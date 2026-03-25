@@ -86,6 +86,7 @@ def run_live_mode():
             return
         controller.session = HTTP(
             testnet=settings.BYBIT_TESTNET,
+            demo=getattr(settings, "BYBIT_DEMO", False),
             api_key=settings.BYBIT_API_KEY,
             api_secret=settings.BYBIT_API_SECRET
         )
