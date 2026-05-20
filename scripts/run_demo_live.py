@@ -56,7 +56,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--symbols", default="ETHUSDT,BTCUSDT,SOLUSDT", help="Comma-separated selector symbols.")
     parser.add_argument(
         "--strategies",
-        default="ema_crossover_baseline,funding_extreme_reversal",
+        default="mtf_trend_pullback,funding_extreme_reversal",
         help="Comma-separated selector strategies.",
     )
     parser.add_argument("--fixed-size", type=float, default=2.0, help="Fixed USDT order size per entry.")
@@ -137,11 +137,11 @@ def main() -> int:
         snapshot_path = save_edge_snapshot(snapshot, settings.LIVE_SELECTOR_EDGE_SNAPSHOT_PATH)
         print(f"Saved edge snapshot to {snapshot_path}")
 
-    print(json.dumps({"runtime": _runtime_summary(settings)}, indent=2, ensure_ascii=False))
+    print(json.dumps({"runtime": _runtime_summary(settings)}, indent=2, ensure_ascii=False, default=str))
 
     controller = BotController()
     start_result = controller.start_trading()
-    print(json.dumps({"start_result": start_result}, indent=2, ensure_ascii=False))
+    print(json.dumps({"start_result": start_result}, indent=2, ensure_ascii=False, default=str))
     if not start_result.get("success"):
         return 1
 
@@ -166,11 +166,11 @@ def main() -> int:
                 "current_position": status.get("current_position"),
                 "selector_state": status.get("selector_state"),
             }
-            print(json.dumps(compact, ensure_ascii=False))
+            print(json.dumps(compact, ensure_ascii=False, default=str))
             time.sleep(max(5, int(args.status_interval_seconds)))
     finally:
         stop_result = controller.stop_trading()
-        print(json.dumps({"stop_result": stop_result}, indent=2, ensure_ascii=False))
+        print(json.dumps({"stop_result": stop_result}, indent=2, ensure_ascii=False, default=str))
 
     return 0
 

@@ -93,8 +93,8 @@ SL_ATR_MULTIPLIER = _env_float(
 VOLUME_MULTIPLIER = float(config.get("strategy", {}).get("volume_multiplier", 1.2))
 VOLUME_MA_PERIOD = int(config.get("strategy", {}).get("volume_ma_period", 20)) 
 LEVELS_LOOKBACK = config.get("strategy", {}).get("levels_lookback", 10)
-MIN_ATR_THRESHOLD = float(config.get("strategy", {}).get("min_atr_threshold", 0.0015))
-IMPULSE_THRESHOLD = float(config.get("strategy", {}).get("impulse_threshold", 0.002))
+MIN_ATR_THRESHOLD = _env_float("MIN_ATR_THRESHOLD", config.get("strategy", {}).get("min_atr_threshold", 0.0015))
+IMPULSE_THRESHOLD = _env_float("IMPULSE_THRESHOLD", config.get("strategy", {}).get("impulse_threshold", 0.002))
 COOLDOWN_CANDLES = int(config.get("strategy", {}).get("cooldown_candles", 4))
 risk_mgmt_cfg = config.get("risk_management", {})
 PARTIAL_TP_ENABLED = _env_bool("PARTIAL_TP_ENABLED", bool(risk_mgmt_cfg.get("partial_tp_enabled", True)))
@@ -157,8 +157,8 @@ DONCHIAN_PERIOD = 7
 RISK_PERCENT = config.get("risk", {}).get("risk_percent", 0.01) # 1% default
 
 # Trading hours (store as simple integers for start/end hour)
-TRADING_START_HOUR = int(config.get('strategy', {}).get('trading_start_hour', 0))
-TRADING_END_HOUR = int(config.get('strategy', {}).get('trading_end_hour', 24))
+TRADING_START_HOUR = _env_int("TRADING_START_HOUR", config.get('strategy', {}).get('trading_start_hour', 0))
+TRADING_END_HOUR = _env_int("TRADING_END_HOUR", config.get('strategy', {}).get('trading_end_hour', 24))
 
 FIXED_USDT_SIZE = _env_float("FIXED_USDT_SIZE", config.get("trading", {}).get("fixed_usdt_size", 2.0))
 DRY_RUN = _env_bool("DRY_RUN", config.get("trading", {}).get("dry_run", True))
@@ -168,6 +168,27 @@ FUNDING_EXTREME_LONG_THRESHOLD = _env_float("FUNDING_EXTREME_LONG_THRESHOLD", -0
 FUNDING_EXTREME_SHORT_THRESHOLD = _env_float("FUNDING_EXTREME_SHORT_THRESHOLD", 0.00007)
 FUNDING_EXTREME_MIN_OI_CHANGE = _env_float("FUNDING_EXTREME_MIN_OI_CHANGE", 0.0)
 FUNDING_EXTREME_MIN_PRICE_MOVE = _env_float("FUNDING_EXTREME_MIN_PRICE_MOVE", 0.0)
+
+MEAN_REV_EMA_PERIOD = _env_int("MEAN_REV_EMA_PERIOD", 50)
+MEAN_REV_RSI_PERIOD = _env_int("MEAN_REV_RSI_PERIOD", 14)
+MEAN_REV_BB_PERIOD = _env_int("MEAN_REV_BB_PERIOD", 20)
+MEAN_REV_BB_STD = _env_float("MEAN_REV_BB_STD", 2.0)
+MEAN_REV_ATR_PERIOD = _env_int("MEAN_REV_ATR_PERIOD", 14)
+MEAN_REV_MIN_ATR_PCT = _env_float("MEAN_REV_MIN_ATR_PCT", 0.0015)
+MEAN_REV_RSI_LONG = _env_float("MEAN_REV_RSI_LONG", 30.0)
+MEAN_REV_RSI_SHORT = _env_float("MEAN_REV_RSI_SHORT", 70.0)
+
+VOL_COMP_EMA_PERIOD = _env_int("VOL_COMP_EMA_PERIOD", 50)
+VOL_COMP_ATR_PERIOD = _env_int("VOL_COMP_ATR_PERIOD", 14)
+VOL_COMP_ATR_MA_PERIOD = _env_int("VOL_COMP_ATR_MA_PERIOD", 50)
+VOL_COMP_BB_PERIOD = _env_int("VOL_COMP_BB_PERIOD", 20)
+VOL_COMP_BB_STD = _env_float("VOL_COMP_BB_STD", 2.0)
+VOL_COMP_BB_WIDTH_MULT = _env_float("VOL_COMP_BB_WIDTH_MULT", 1.10)
+
+MTF_PULLBACK_EMA_PERIOD = _env_int("MTF_PULLBACK_EMA_PERIOD", 50)
+MTF_PULLBACK_RSI_PERIOD = _env_int("MTF_PULLBACK_RSI_PERIOD", 14)
+MTF_PULLBACK_RSI_LONG = _env_float("MTF_PULLBACK_RSI_LONG", 45.0)
+MTF_PULLBACK_RSI_SHORT = _env_float("MTF_PULLBACK_RSI_SHORT", 55.0)
 
 # --- Risk Management ---
 MAX_TRADES_PER_DAY = config.get("risk", {}).get("max_trades_per_day", 10)
@@ -217,6 +238,10 @@ LIVE_SELECTOR_HTF_LOOKBACK_BARS = _env_int("LIVE_SELECTOR_HTF_LOOKBACK_BARS", li
 LIVE_SELECTOR_STALE_DATA_MINUTES = _env_int("LIVE_SELECTOR_STALE_DATA_MINUTES", live_selector_cfg.get("stale_data_minutes", 45))
 LIVE_SELECTOR_MAX_SPREAD_BPS = _env_float("LIVE_SELECTOR_MAX_SPREAD_BPS", live_selector_cfg.get("max_spread_bps", 8.0))
 LIVE_SELECTOR_SCAN_INTERVAL_SECONDS = _env_int("LIVE_SELECTOR_SCAN_INTERVAL_SECONDS", live_selector_cfg.get("scan_interval_seconds", 30))
+LIVE_SELECTOR_ADJUST_QTY_TO_EXCHANGE_MIN = _env_bool(
+    "LIVE_SELECTOR_ADJUST_QTY_TO_EXCHANGE_MIN",
+    bool(live_selector_cfg.get("adjust_qty_to_exchange_min", False)),
+)
 
 
 # --- Binarium Config (Legacy/Hybrid) ---

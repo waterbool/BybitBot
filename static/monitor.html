@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bybit Bot Monitor</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .monitor-shell {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        .monitor-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .monitor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .monitor-card {
+            background: rgba(15, 23, 42, 0.72);
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.2);
+        }
+        .monitor-card h3 {
+            margin: 0 0 12px;
+            font-size: 16px;
+        }
+        .monitor-value {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .monitor-label {
+            color: #94a3b8;
+            font-size: 13px;
+        }
+        .monitor-panels {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .monitor-panel-stack {
+            display: grid;
+            gap: 16px;
+        }
+        .kv {
+            display: grid;
+            grid-template-columns: 160px 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .kv .key {
+            color: #94a3b8;
+        }
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .pill.ok {
+            background: rgba(16, 185, 129, 0.14);
+            color: #34d399;
+        }
+        .pill.warn {
+            background: rgba(245, 158, 11, 0.14);
+            color: #fbbf24;
+        }
+        .pill.bad {
+            background: rgba(239, 68, 68, 0.14);
+            color: #f87171;
+        }
+        .log-box {
+            background: rgba(2, 6, 23, 0.85);
+            border-radius: 14px;
+            padding: 14px;
+            min-height: 280px;
+            max-height: 420px;
+            overflow: auto;
+            white-space: pre-wrap;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+        .table-wrap {
+            overflow: auto;
+        }
+        table.monitor-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .monitor-table th,
+        .monitor-table td {
+            padding: 10px 8px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+            text-align: left;
+        }
+        .monitor-table th {
+            color: #94a3b8;
+            font-weight: 600;
+        }
+        @media (max-width: 980px) {
+            .monitor-panels {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="monitor-shell">
+        <div class="monitor-header">
+            <div>
+                <h1>Bybit Bot Monitor</h1>
+                <div class="monitor-label" id="serverTime">Loading...</div>
+            </div>
+            <div id="serviceBadge" class="pill warn">Checking</div>
+        </div>
+
+        <div class="monitor-grid">
+            <div class="monitor-card">
+                <div class="monitor-value" id="serviceState">-</div>
+                <div class="monitor-label">Bot Service</div>
+            </div>
+            <div class="monitor-card">
+                <div class="monitor-value" id="snapshotAge">-</div>
+                <div class="monitor-label">Snapshot Age</div>
+            </div>
+            <div class="monitor-card">
+                <div class="monitor-value" id="openOrders">-</div>
+                <div class="monitor-label">Open Orders</div>
+            </div>
+            <div class="monitor-card">
+                <div class="monitor-value" id="activePositions">-</div>
+                <div class="monitor-label">Active Positions</div>
+            </div>
+        </div>
+
+        <div class="monitor-panels">
+            <div class="monitor-panel-stack">
+                <div class="monitor-card">
+                    <h3>Runtime</h3>
+                    <div class="kv"><div class="key">Started At</div><div id="startedAt">-</div></div>
+                    <div class="kv"><div class="key">PID</div><div id="mainPid">-</div></div>
+                    <div class="kv"><div class="key">Memory</div><div id="memoryCurrent">-</div></div>
+                    <div class="kv"><div class="key">Tasks</div><div id="tasksCurrent">-</div></div>
+                    <div class="kv"><div class="key">Selector Skip</div><div id="lastSkipReason">-</div></div>
+                    <div class="kv"><div class="key">Last Scan</div><div id="lastScanAt">-</div></div>
+                    <div class="kv"><div class="key">Next Refresh</div><div id="nextRefresh">-</div></div>
+                    <div class="kv"><div class="key">Last Refresh</div><div id="lastRefresh">-</div></div>
+                </div>
+
+                <div class="monitor-card">
+                    <h3>Snapshot Rows</h3>
+                    <div class="table-wrap">
+                        <table class="monitor-table">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Edge</th>
+                                    <th>Win Rate</th>
+                                    <th>Net PnL</th>
+                                </tr>
+                            </thead>
+                            <tbody id="snapshotRows">
+                                <tr><td colspan="4">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="monitor-panel-stack">
+                <div class="monitor-card">
+                    <h3>Positions</h3>
+                    <div class="table-wrap">
+                        <table class="monitor-table">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th>Size</th>
+                                    <th>UPnL</th>
+                                </tr>
+                            </thead>
+                            <tbody id="positionsBody">
+                                <tr><td colspan="4">No active positions</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="monitor-card">
+                    <h3>Orders</h3>
+                    <div class="table-wrap">
+                        <table class="monitor-table">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th>Qty</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ordersBody">
+                                <tr><td colspan="4">No open orders</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="monitor-panels">
+            <div class="monitor-card">
+                <h3>Bot Logs</h3>
+                <div class="log-box" id="botLogs">Loading...</div>
+            </div>
+            <div class="monitor-card">
+                <h3>Refresh Logs</h3>
+                <div class="log-box" id="refreshLogs">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/monitor.js"></script>
+</body>
+</html>

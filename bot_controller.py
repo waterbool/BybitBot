@@ -13,6 +13,7 @@ from config import settings
 from live.edge_snapshot import load_edge_snapshot, snapshot_is_fresh, snapshot_age_minutes
 from live.scanner import scan_live_candidates
 from live.trade_gate import evaluate_trade_gate
+from order_constraints import format_price_for_order, normalize_entry_qty, normalize_reduce_only_qty
 from risk.risk import RiskManager
 from pybit.unified_trading import HTTP
 from single_symbol_pipeline import (
@@ -38,6 +39,7 @@ class BotController:
         self.stop_flag = threading.Event()
         self.risk_manager: Optional[RiskManager] = None
         self.session: Optional[HTTP] = None
+        self.instrument_info_cache: Dict[str, Dict] = {}
         
         # Statistics
         self.trades_history: List[Dict] = []
@@ -133,6 +135,33 @@ class BotController:
                 continue
         return None
 
+    def _get_instrument_info(self, symbol: str) -> Dict:
+        cached = self.instrument_info_cache.get(symbol)
+        if cached:
+            return cached
+        if not self.session:
+            return {}
+        try:
+            response = self.session.get_instruments_info(
+                category=settings.BYBIT_CATEGORY,
+                symbol=symbol,
+            )
+        except Exception as exc:
+            logger.warning("Failed to fetch instrument info for %s: %s", symbol, exc)
+            return {}
+
+        if response.get("retCode") != 0:
+            logger.warning("Bybit instrument info request failed for %s: %s", symbol, response)
+            return {}
+
+        items = response.get("result", {}).get("list", []) or []
+        if not items:
+            logger.warning("Bybit instrument info response was empty for %s", symbol)
+            return {}
+
+        self.instrument_info_cache[symbol] = items[0]
+        return items[0]
+
     def _update_stop_loss(self, new_sl: float, symbol: Optional[str] = None):
         symbol = symbol or (self.current_position or {}).get("symbol") or settings.BYBIT_SYMBOL
         execution_mode = (self.current_position or {}).get("execution_mode")
@@ -142,10 +171,11 @@ class BotController:
         if not self.session:
             return
         try:
+            instrument_info = self._get_instrument_info(symbol)
             resp = self.session.set_trading_stop(
                 category=settings.BYBIT_CATEGORY,
                 symbol=symbol,
-                stopLoss=str(new_sl),
+                stopLoss=format_price_for_order(new_sl, instrument_info),
             )
             logger.info(f"Stop loss updated: {resp}")
         except Exception as e:
@@ -163,12 +193,39 @@ class BotController:
             if not self.session:
                 return
             try:
+                instrument_info = self._get_instrument_info(symbol)
+                qty_plan = normalize_reduce_only_qty(
+                    desired_qty=qty,
+                    remaining_qty=float((self.current_position or {}).get("qty_remaining", qty) or qty),
+                    instrument_info=instrument_info,
+                )
+                if not qty_plan["ok"]:
+                    logger.warning(
+                        "Skipping reduce-only close for %s: %s",
+                        symbol,
+                        qty_plan["reason"],
+                    )
+                    return
+                if qty_plan["adjusted"]:
+                    if qty_plan["promoted_to_full_close"]:
+                        logger.info(
+                            "Promoting partial close for %s to a full reduce-only close at qty=%s to satisfy Bybit lot size.",
+                            symbol,
+                            qty_plan["qty_str"],
+                        )
+                    else:
+                        logger.info(
+                            "Rounded reduce-only close size for %s to qty=%s to satisfy Bybit lot size.",
+                            symbol,
+                            qty_plan["qty_str"],
+                        )
+                qty = float(qty_plan["qty"])
                 resp = self.session.place_order(
                     category=settings.BYBIT_CATEGORY,
                     symbol=symbol,
                     side=side,
                     orderType="Market",
-                    qty=str(qty),
+                    qty=qty_plan["qty_str"],
                     reduceOnly=True,
                     timeInForce="GTC",
                 )
@@ -646,7 +703,48 @@ class BotController:
             size_mult = min_mult + confidence * (max_mult - min_mult)
             size_mult = max(min_mult, min(max_mult, size_mult))
         position_size_usdt = base_usdt * size_mult
-        qty = round(position_size_usdt / close_price, 3)
+        desired_qty = position_size_usdt / close_price
+        instrument_info = self._get_instrument_info(target_symbol) if real_orders else {}
+        if real_orders and not instrument_info:
+            logger.warning("Skipping REAL %s for %s: unable to fetch Bybit instrument info.", side, target_symbol)
+            return
+        if real_orders:
+            qty_plan = normalize_entry_qty(
+                desired_qty=desired_qty,
+                price=close_price,
+                instrument_info=instrument_info,
+                allow_increase=bool(getattr(settings, "LIVE_SELECTOR_ADJUST_QTY_TO_EXCHANGE_MIN", False)),
+            )
+            if not qty_plan["ok"]:
+                logger.warning(
+                    (
+                        "Skipping REAL %s for %s (%s): desired qty %.6f (~%.2f USDT) "
+                        "does not satisfy Bybit minimums. Required qty >= %.6f (~%.2f USDT)."
+                    ),
+                    side,
+                    target_symbol,
+                    strategy_name,
+                    desired_qty,
+                    position_size_usdt,
+                    float(qty_plan["min_required_qty"] or 0.0),
+                    float(qty_plan["min_required_notional"] or 0.0),
+                )
+                return
+            if qty_plan["adjusted"]:
+                logger.info(
+                    (
+                        "Adjusted REAL order size for %s from qty=%.6f (~%.2f USDT) "
+                        "to qty=%s (~%.2f USDT) to satisfy Bybit lot size filters."
+                    ),
+                    target_symbol,
+                    desired_qty,
+                    position_size_usdt,
+                    qty_plan["qty_str"],
+                    float(qty_plan["effective_notional"] or 0.0),
+                )
+            qty = float(qty_plan["qty"])
+        else:
+            qty = round(desired_qty, 3)
         if qty <= 0:
             logger.warning("Calculated zero quantity for %s %s @ %s", target_symbol, strategy_name, close_price)
             return
@@ -654,10 +752,12 @@ class BotController:
         # Calculate SL/TP
         atr_col = f'ATR_{settings.ATR_PERIOD}'
         atr = signal_row.get(atr_col)
-        if atr is None or pd.isna(atr):
-            atr = 10
-        sl_dist = atr * settings.SL_ATR_MULT
-        tp_dist = atr * settings.RISK_REWARD_RATIO
+        if atr is None or pd.isna(atr) or float(atr) == 0:
+            logger.warning("ATR missing/zero for %s — skipping trade signal", target_symbol)
+            self.current_position = None
+            return
+        sl_dist = float(atr) * settings.SL_ATR_MULT
+        tp_dist = sl_dist * settings.RISK_REWARD_RATIO
         
         if side == "Buy":
             sl_price = round(close_price - sl_dist, 2)
@@ -752,15 +852,17 @@ class BotController:
                     logger.error("Real execution requested but Bybit session is not initialized")
                     self.current_position = None
                     return
+                sl_price_str = format_price_for_order(sl_price, instrument_info)
+                tp_price_str = format_price_for_order(tp_price, instrument_info)
                 logger.info(f"Placing REAL {side} Order for {target_symbol}...")
                 resp = self.session.place_order(
                     category=settings.BYBIT_CATEGORY,
                     symbol=target_symbol,
                     side=side,
                     orderType="Market",
-                    qty=str(qty),
-                    stopLoss=str(sl_price),
-                    takeProfit=str(tp_price),
+                    qty=qty_plan["qty_str"],
+                    stopLoss=sl_price_str,
+                    takeProfit=tp_price_str,
                     timeInForce="GTC"
                 )
                 logger.info(f"Order Placed: {resp}")

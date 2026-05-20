@@ -25,8 +25,8 @@ strategy:
   risk_reward_ratio: 1.5 # Target Risk/Reward
   sl_atr_multiplier: 2.0 # Stop Loss distance in ATRs (Standard 2.0 for this strategy)
   volume_ma_period: 20 # Period for Volume SMA
-  trading_start_hour: 8 # Start trading at 08:00 UTC (example)
-  trading_end_hour: 20 # Stop trading at 20:00 UTC (example)
+  trading_start_hour: 0 # Crypto trades 24/7; use env to narrow the window if needed
+  trading_end_hour: 24
   volume_multiplier: 1.2
   volume_lookback: 20
   levels_lookback: 10
@@ -85,7 +85,7 @@ live_selector:
     - "BTCUSDT"
     - "SOLUSDT"
   strategies:
-    - "ema_crossover_baseline"
+    - "mtf_trend_pullback"
     - "funding_extreme_reversal"
   execution_mode: "paper"
   edge_snapshot_path: "reports/live_edge_snapshot.json"
@@ -110,3 +110,4 @@ live_selector:
   stale_data_minutes: 45
   max_spread_bps: 8.0
   scan_interval_seconds: 30
+  adjust_qty_to_exchange_min: false
