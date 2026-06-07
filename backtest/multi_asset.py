@@ -6,7 +6,18 @@ from typing import Callable
 import pandas as pd
 
 from backtest.backtester import run_backtest
-from backtest.market_data import build_funding_frame, build_mtf_frame, load_base_15m
+from backtest.market_data import (
+    build_funding_frame,
+    build_funding_frame_live,
+    build_mtf_frame,
+    build_mtf_frame_live,
+    load_base_15m,
+    load_base_15m_live,
+)
+
+# Maps each CSV frame-builder to its live (API-fetched) equivalent.
+# Used when use_live_data=True is passed to run_multi_symbol_backtests.
+_LIVE_FRAME_BUILDER_MAP: dict = {}  # populated after class definition
 from backtest.scoring import compute_signal_score
 from config import settings
 from strategy.rules import (
@@ -63,6 +74,13 @@ STRATEGY_SPECS: dict[str, StrategySpec] = {
 }
 
 DEFAULT_STRATEGIES = list(STRATEGY_SPECS.keys())
+
+# Build the live-builder map now that all function objects exist.
+_LIVE_FRAME_BUILDER_MAP = {
+    load_base_15m: load_base_15m_live,
+    build_mtf_frame: build_mtf_frame_live,
+    build_funding_frame: build_funding_frame_live,
+}
 
 
 def normalize_symbols(symbols: list[str]) -> list[str]:
@@ -310,7 +328,16 @@ def run_multi_symbol_backtests(
     lookback_days: int = 90,
     initial_balance: float | None = None,
     enable_ml: bool = False,
+    use_live_data: bool = False,
 ) -> tuple[list[dict], pd.DataFrame]:
+    """Run backtests for all symbol × strategy combinations.
+
+    Args:
+        use_live_data: When True, fetch OHLCV/funding/OI data directly from
+                       the Bybit API instead of reading CSV files.  This makes
+                       the edge snapshot always reflect the most recent price
+                       action without requiring a separate CSV download step.
+    """
     symbols = normalize_symbols(symbols)
     specs = resolve_strategy_specs(strategy_names)
     initial_balance = float(initial_balance if initial_balance is not None else settings.INITIAL_BALANCE)
@@ -323,7 +350,11 @@ def run_multi_symbol_backtests(
         for symbol in symbols:
             for spec in specs:
                 try:
-                    df = spec.frame_builder(symbol, lookback_days)
+                    if use_live_data:
+                        frame_builder = _LIVE_FRAME_BUILDER_MAP.get(spec.frame_builder, spec.frame_builder)
+                    else:
+                        frame_builder = spec.frame_builder
+                    df = frame_builder(symbol, lookback_days)
                     metrics, trades_df, equity_df, monthly_stats = run_backtest(
                         df=df,
                         initial_balance=initial_balance,

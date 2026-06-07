@@ -267,9 +267,11 @@ def fetch_klines_paginated(
         )
 
         if interval_ms:
-            if new_first_ts <= start_ts_ms:
-                break
-            if len(result_list) < limit and new_first_ts <= start_ts_ms:
+            # Break if we've reached (or passed) the requested start, OR if the
+            # first returned candle is within one interval of start (the sub-interval
+            # gap between start_ts_ms and the first real candle boundary), OR if we
+            # got fewer candles than the page limit (no more data exists before this batch).
+            if new_first_ts <= start_ts_ms + interval_ms or len(result_list) < limit:
                 break
             current_end = new_first_ts - 1
         else:

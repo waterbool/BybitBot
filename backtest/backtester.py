@@ -10,7 +10,7 @@ from strategy.rules import apply_strategy
 
 def _calc_tp_sl(entry_price: float, side: int, atr: float) -> tuple[float, float]:
     sl_dist = atr * settings.SL_ATR_MULT
-    tp_dist = atr * settings.RISK_REWARD_RATIO
+    tp_dist = sl_dist * settings.RISK_REWARD_RATIO   # TP = SL_distance × RR (not atr × RR)
     if side == 1:
         sl = entry_price - sl_dist
         tp = entry_price + tp_dist
@@ -298,7 +298,11 @@ def run_backtest(
                     reason = 'TRAIL' if position.get('trailing_active', False) else 'SL'
                     _apply_exit(position['sl'], reason)
                 elif hit_tp1 and hit_tp:
+                    # Price hit both TP1 and full TP on same candle: TP1 order fills first,
+                    # then the full-TP limit order also fills (price reached it).
                     _apply_tp1()
+                    if position is not None:         # remaining 50% → close at full TP
+                        _apply_exit(position['tp'], 'TP')
                 elif hit_tp1:
                     _apply_tp1()
                 elif hit_tp:

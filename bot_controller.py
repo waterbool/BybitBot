@@ -14,6 +14,7 @@ from live.edge_snapshot import load_edge_snapshot, snapshot_is_fresh, snapshot_a
 from live.scanner import scan_live_candidates
 from live.trade_gate import evaluate_trade_gate
 from order_constraints import format_price_for_order, normalize_entry_qty, normalize_reduce_only_qty
+from tls_compat import patch_pybit_session
 from risk.risk import RiskManager
 from pybit.unified_trading import HTTP
 from single_symbol_pipeline import (
@@ -134,6 +135,25 @@ class BotController:
             except Exception:
                 continue
         return None
+
+    def _get_account_balance(self) -> float:
+        """Return total USDT equity from the Bybit account. Returns 0 on failure."""
+        if not self.session:
+            return 0.0
+        try:
+            resp = self.session.get_wallet_balance(accountType="UNIFIED")
+            if resp.get("retCode") != 0:
+                logger.warning("Balance fetch failed: %s", resp.get("retMsg"))
+                return 0.0
+            coins = resp["result"]["list"][0].get("coin", [])
+            usdt = next((c for c in coins if c["coin"] == "USDT"), None)
+            if usdt:
+                return float(usdt.get("walletBalance") or 0.0)
+            # Fall back to totalEquity if no USDT coin entry
+            return float(resp["result"]["list"][0].get("totalEquity") or 0.0)
+        except Exception as exc:
+            logger.warning("_get_account_balance error: %s", exc)
+            return 0.0
 
     def _get_instrument_info(self, symbol: str) -> Dict:
         cached = self.instrument_info_cache.get(symbol)
@@ -353,7 +373,10 @@ class BotController:
                 reason = "TRAIL" if pos.get('trailing_active', False) else "SL"
                 _apply_full_exit(reason, pos['sl'])
             elif hit_tp1 and hit_tp:
+                # Both TP1 and full TP hit same candle — close partial at TP1, then remainder at TP
                 _apply_tp1()
+                if self.current_position is not None:   # remaining 50% → full TP
+                    _apply_full_exit("TP", pos['tp'])
             elif hit_tp1:
                 _apply_tp1()
             elif hit_tp:
@@ -597,6 +620,7 @@ class BotController:
                     api_key=settings.BYBIT_API_KEY,
                     api_secret=settings.BYBIT_API_SECRET
                 )
+                patch_pybit_session(self.session)
                 logger.info("Connected to Bybit API")
                 self.risk_manager.sync_from_api(self.session)
             else:
@@ -685,24 +709,68 @@ class BotController:
         real_orders = self._should_place_real_orders(execution_mode)
         normalized_execution_mode = "live" if real_orders else "paper"
         side = "Buy" if signal == 1 else "Sell"
-        base_usdt = float(settings.FIXED_USDT_SIZE)
-        size_mult = 1.0
-        confidence = 0.0
-        if getattr(settings, "POSITION_SIZING_ENABLED", False):
-            min_mult = float(getattr(settings, "POSITION_SIZING_MIN_MULT", 0.5))
-            max_mult = float(getattr(settings, "POSITION_SIZING_MAX_MULT", 1.5))
-            prob = None
-            if signal == 1:
-                prob = signal_row.get('p_up')
-            elif signal == -1:
-                prob = signal_row.get('p_down')
-            if prob is None or pd.isna(prob):
-                confidence = 0.0
+
+        # ── ATR check (needed for both SL/TP and risk-based sizing) ──────────
+        # Try configured period first, then fall back to any ATR_ column in signal_row
+        atr_col = f'ATR_{settings.ATR_PERIOD}'
+        atr = signal_row.get(atr_col)
+        if atr is None or pd.isna(atr) or float(atr) == 0:
+            fallback_cols = sorted([k for k in signal_row.keys() if k.startswith('ATR_')])
+            for col in fallback_cols:
+                v = signal_row.get(col)
+                if v is not None and not pd.isna(v) and float(v) != 0:
+                    logger.debug("ATR_%s not found; using %s=%.4f", settings.ATR_PERIOD, col, float(v))
+                    atr_col, atr = col, v
+                    break
+        if atr is None or pd.isna(atr) or float(atr) == 0:
+            logger.warning("ATR missing/zero for %s — skipping trade signal", target_symbol)
+            self.current_position = None
+            return
+        atr = float(atr)
+        sl_dist = atr * settings.SL_ATR_MULT          # SL distance in price units
+        sl_dist_usdt = sl_dist                         # for linear USDT perps 1 contract = 1 coin
+
+        # ── Position sizing ───────────────────────────────────────────────────
+        # Defaults — overridden below depending on sizing mode
+        confidence: float = 0.0
+        size_mult: float = 1.0
+        position_size_usdt: float
+        if getattr(settings, "RISK_BASED_SIZING", False):
+            balance = self._get_account_balance() if real_orders else float(
+                getattr(settings, "PAPER_BALANCE_USDT", 50000.0)
+            )
+            if balance <= 0:
+                logger.warning("Could not fetch account balance for %s — falling back to FIXED_USDT_SIZE", target_symbol)
+                balance = 0.0
+            if balance > 0:
+                risk_amount   = balance * float(settings.RISK_PERCENT)          # e.g. 2% of $50k = $1 000
+                risk_qty      = risk_amount / sl_dist_usdt                       # contracts to risk
+                risk_notional = risk_qty * close_price                           # USDT notional
+                max_notional  = balance * float(getattr(settings, "MAX_POSITION_PCT", 0.10))
+                position_size_usdt = min(risk_notional, max_notional)
+                logger.info(
+                    "Risk sizing %s: balance=%.2f risk=%.2f%% → risk_amount=%.2f "
+                    "sl_dist=%.4f → notional=%.2f (capped at %.2f)",
+                    target_symbol,
+                    balance,
+                    float(settings.RISK_PERCENT) * 100,
+                    risk_amount,
+                    sl_dist_usdt,
+                    risk_notional,
+                    max_notional,
+                )
             else:
-                confidence = abs(float(prob) - 0.5) * 2.0
-            size_mult = min_mult + confidence * (max_mult - min_mult)
-            size_mult = max(min_mult, min(max_mult, size_mult))
-        position_size_usdt = base_usdt * size_mult
+                position_size_usdt = float(settings.FIXED_USDT_SIZE)
+        else:
+            size_mult = 1.0
+            if getattr(settings, "POSITION_SIZING_ENABLED", False):
+                min_mult = float(getattr(settings, "POSITION_SIZING_MIN_MULT", 0.5))
+                max_mult = float(getattr(settings, "POSITION_SIZING_MAX_MULT", 1.5))
+                prob = signal_row.get('p_up') if signal == 1 else signal_row.get('p_down')
+                confidence = 0.0 if (prob is None or pd.isna(prob)) else abs(float(prob) - 0.5) * 2.0
+                size_mult = max(min_mult, min(max_mult, min_mult + confidence * (max_mult - min_mult)))
+            position_size_usdt = float(settings.FIXED_USDT_SIZE) * size_mult
+
         desired_qty = position_size_usdt / close_price
         instrument_info = self._get_instrument_info(target_symbol) if real_orders else {}
         if real_orders and not instrument_info:
@@ -749,14 +817,7 @@ class BotController:
             logger.warning("Calculated zero quantity for %s %s @ %s", target_symbol, strategy_name, close_price)
             return
         
-        # Calculate SL/TP
-        atr_col = f'ATR_{settings.ATR_PERIOD}'
-        atr = signal_row.get(atr_col)
-        if atr is None or pd.isna(atr) or float(atr) == 0:
-            logger.warning("ATR missing/zero for %s — skipping trade signal", target_symbol)
-            self.current_position = None
-            return
-        sl_dist = float(atr) * settings.SL_ATR_MULT
+        # Calculate SL/TP  (atr / sl_dist already computed above for sizing)
         tp_dist = sl_dist * settings.RISK_REWARD_RATIO
         
         if side == "Buy":

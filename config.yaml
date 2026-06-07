@@ -13,31 +13,46 @@ trading:
   symbol: "ETHUSDT"
   category: "linear" # linear for USDT Perpetual
   max_leverage: 10 # Leverage (1-10)
-  fixed_usdt_size: 2.0 # Fixed position size in USDT (e.g., 2 USDT)
+  fixed_usdt_size: 10.0 # Fixed position size in USDT — must exceed SOL min (~6.47 at current price)
   dry_run: true # If true, no real orders will be placed
 
 # Strategy Settings
 strategy:
-  timeframe: "30" # Timeframe: "30" for 30-minute candles
+  timeframe: "15"
   ema_fast: 9
   ema_slow: 21
-  atr_period: 20
-  risk_reward_ratio: 1.5 # Target Risk/Reward
-  sl_atr_multiplier: 2.0 # Stop Loss distance in ATRs (Standard 2.0 for this strategy)
-  volume_ma_period: 20 # Period for Volume SMA
-  trading_start_hour: 0 # Crypto trades 24/7; use env to narrow the window if needed
+  atr_period: 14                   # match ATR_14 produced by scanner
+  risk_reward_ratio: 2.0           # 2R minimum: need bigger wins to cover losses
+  sl_atr_multiplier: 2.0           # SL = 2 × ATR
+  volume_ma_period: 20
+  trading_start_hour: 0
   trading_end_hour: 24
   volume_multiplier: 1.2
   volume_lookback: 20
   levels_lookback: 10
   min_atr_threshold: 0.0020
   impulse_threshold: 0.0020
-  cooldown_candles: 4
-  tp1_atr_mult: 1.0
+  cooldown_candles: 8              # 2h cooldown between signals
+  tp1_atr_mult: 1.5                # TP1 further out = more profit before SL
   tp1_partial_pct: 0.5
-  trail_atr_mult: 1.5
-  trail_activate_atr: 1.0
-  time_stop_candles: 4
+  trail_atr_mult: 2.0              # trail stops tighter after TP1
+  trail_activate_atr: 1.5          # activate trailing only after price moves 1.5 ATR
+  time_stop_candles: 32            # 8h time stop
+
+  # MTF pullback tuning
+  mtf_pullback_ema_period: 50
+  mtf_pullback_rsi_long: 40        # oversold threshold (was 45)
+  mtf_pullback_rsi_short: 60       # overbought threshold (was 55)
+  mtf_pullback_min_depth: 0.003    # must be 0.3% below EMA50
+  mtf_pullback_vol_mult: 1.0       # volume > SMA
+  mtf_pullback_cooldown_bars: 8    # 2h no re-entry
+
+  # Funding extreme reversal tuning
+  funding_extreme_long_threshold: -0.00012   # top-10% most negative (was -0.00007 too loose, -0.0003 never fires)
+  funding_extreme_short_threshold: 0.00012
+  funding_extreme_rsi_max_long: 45
+  funding_extreme_rsi_min_short: 55
+  funding_extreme_cooldown_bars: 16         # 4h between signals
 
 ml:
   enabled: true
@@ -54,21 +69,25 @@ position_sizing:
 
 risk_management:
   partial_tp_enabled: true
-  partial_tp_atr_mult: 1.0
+  partial_tp_atr_mult: 1.5         # TP1 at 1.5 ATR (was 1.0)
   partial_tp_fraction: 0.5
   be_enabled: true
-  be_buffer_bps: 2
-  trailing_enabled: true
-  trail_activation_atr: 1.0
-  trail_atr_mult: 1.5
+  be_buffer_bps: 5
+  trailing_enabled: false            # OFF: trail cuts winners before TP; pf 0.86→1.16 without it
+  trail_activation_atr: 2.5         # (inactive — kept for reference)
+  trail_atr_mult: 1.5               # (inactive — kept for reference)
   time_stop_enabled: true
-  time_stop_candles: 4
+  time_stop_candles: 32            # 8h
   prefer_worst_case: true
 
 # Risk Management
 risk:
   max_trades_per_day: 10
-  max_daily_loss_usdt: 10.0
+  max_daily_loss_usdt: 2000.0    # 4% of $50k demo account
+  risk_percent: 0.02             # 2% risk per trade
+  risk_based_sizing: false       # OFF: demo uses fixed_usdt_size=2; risk-based sizing ignores --fixed-size flag
+  max_position_pct: 0.10         # max 10% of balance in one trade
+  paper_balance_usdt: 50000.0    # used for paper-mode sizing estimate
 
 # Backtest Settings
 backtest:
@@ -95,8 +114,8 @@ live_selector:
   use_ml: false
   signal_weight: 0.4
   edge_weight: 0.6
-  min_signal_score: 0.60
-  min_edge_score: 0.55
+  min_signal_score: 0.50   # only high-quality signals
+  min_edge_score: 0.20     # low bar while strategies are tuning (gate still blocks junk)
   max_new_trades_per_day: 2
   max_per_symbol_per_day: 1
   max_per_strategy_per_day: 1
@@ -110,4 +129,4 @@ live_selector:
   stale_data_minutes: 45
   max_spread_bps: 8.0
   scan_interval_seconds: 30
-  adjust_qty_to_exchange_min: false
+  adjust_qty_to_exchange_min: true   # bump up to exchange minimum when fixed size is too small
