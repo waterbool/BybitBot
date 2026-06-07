@@ -12,6 +12,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+# Apply TLS-1.2 patch BEFORE any pybit/requests imports.
+# V2Ray/Hiddify TUN mode resets TLS-1.3 handshakes from Python OpenSSL.
+import tls_compat  # noqa: E402
+
 
 def _is_placeholder(value: str | None) -> bool:
     if not value:
@@ -28,6 +32,9 @@ def _set_demo_env(args: argparse.Namespace) -> None:
     os.environ["DRY_RUN"] = "false"
     os.environ["LIVE_SELECTOR_ENABLED"] = "true"
     os.environ["LIVE_SELECTOR_EXECUTION_MODE"] = "live"
+    # Always use fixed-size in demo — risk-based sizing would use real account balance
+    # and could place multi-thousand-dollar orders when FIXED_USDT_SIZE is $2.
+    os.environ["RISK_BASED_SIZING"] = "false"
 
     if args.api_key:
         os.environ["BYBIT_API_KEY"] = args.api_key
@@ -59,7 +66,7 @@ def _parse_args() -> argparse.Namespace:
         default="mtf_trend_pullback,funding_extreme_reversal",
         help="Comma-separated selector strategies.",
     )
-    parser.add_argument("--fixed-size", type=float, default=2.0, help="Fixed USDT order size per entry.")
+    parser.add_argument("--fixed-size", type=float, default=10.0, help="Fixed USDT order size per entry (must exceed exchange minimums, e.g. SOL min ~$6.50).")
     parser.add_argument(
         "--snapshot-path",
         default=str(BASE_DIR / "reports" / "live_edge_snapshot.json"),
@@ -135,13 +142,13 @@ def main() -> int:
             enable_ml=settings.LIVE_SELECTOR_USE_ML,
         )
         snapshot_path = save_edge_snapshot(snapshot, settings.LIVE_SELECTOR_EDGE_SNAPSHOT_PATH)
-        print(f"Saved edge snapshot to {snapshot_path}")
+        print(f"Saved edge snapshot to {snapshot_path}", flush=True)
 
-    print(json.dumps({"runtime": _runtime_summary(settings)}, indent=2, ensure_ascii=False, default=str))
+    print(json.dumps({"runtime": _runtime_summary(settings)}, indent=2, ensure_ascii=False, default=str), flush=True)
 
     controller = BotController()
     start_result = controller.start_trading()
-    print(json.dumps({"start_result": start_result}, indent=2, ensure_ascii=False, default=str))
+    print(json.dumps({"start_result": start_result}, indent=2, ensure_ascii=False, default=str), flush=True)
     if not start_result.get("success"):
         return 1
 
@@ -166,11 +173,11 @@ def main() -> int:
                 "current_position": status.get("current_position"),
                 "selector_state": status.get("selector_state"),
             }
-            print(json.dumps(compact, ensure_ascii=False, default=str))
+            print(json.dumps(compact, ensure_ascii=False, default=str), flush=True)
             time.sleep(max(5, int(args.status_interval_seconds)))
     finally:
         stop_result = controller.stop_trading()
-        print(json.dumps({"stop_result": stop_result}, indent=2, ensure_ascii=False, default=str))
+        print(json.dumps({"stop_result": stop_result}, indent=2, ensure_ascii=False, default=str), flush=True)
 
     return 0
 

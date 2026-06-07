@@ -571,17 +571,18 @@ def apply_volatility_compression_breakout_strategy(df: pd.DataFrame) -> pd.DataF
 def apply_mtf_trend_pullback_strategy(df: pd.DataFrame) -> pd.DataFrame:
     """
     Multi-timeframe trend pullback strategy signal generator.
-    Expects a 'bias' column in df:
-      1 = LONG bias (1H close > EMA200)
-     -1 = SHORT bias (1H close < EMA200)
-      0 = no bias / insufficient data
+    Expects a 'bias' column in df (from 1H EMA200):
+      1 = LONG bias,  -1 = SHORT bias,  0 = no bias
 
-    15m LONG:
-      - bias = LONG
-      - close touches or below EMA(50)
-      - RSI(14) < 45
-      - current close > previous close
-    SHORT: зеркально
+    LONG conditions (all must be true):
+      - 1H bias = LONG (price > EMA200 on hourly)
+      - 15m close <= EMA50  (in a pullback zone)
+      - 15m close < EMA50 * (1 - min_pullback_pct)  (meaningful pullback, not just touching)
+      - RSI(14) < rsi_long  (oversold; default 40)
+      - close > prev_close  (candle is turning up)
+      - volume > vol_sma * vol_mult  (volume confirmation)
+      - signal was not active in the previous cooldown_bars candles  (no repeated fire)
+    SHORT: mirror of the above.
     """
     df['signal'] = 0
 
@@ -589,10 +590,13 @@ def apply_mtf_trend_pullback_strategy(df: pd.DataFrame) -> pd.DataFrame:
         logger.info("MTF pullback: bias missing -> no signals")
         return df
 
-    ema_period = int(getattr(settings, "MTF_PULLBACK_EMA_PERIOD", 50))
-    rsi_period = int(getattr(settings, "MTF_PULLBACK_RSI_PERIOD", 14))
-    rsi_long = float(getattr(settings, "MTF_PULLBACK_RSI_LONG", 45.0))
-    rsi_short = float(getattr(settings, "MTF_PULLBACK_RSI_SHORT", 55.0))
+    ema_period   = int(getattr(settings, "MTF_PULLBACK_EMA_PERIOD",   50))
+    rsi_period   = int(getattr(settings, "MTF_PULLBACK_RSI_PERIOD",   14))
+    rsi_long     = float(getattr(settings, "MTF_PULLBACK_RSI_LONG",   40.0))   # tighter
+    rsi_short    = float(getattr(settings, "MTF_PULLBACK_RSI_SHORT",  60.0))   # tighter
+    min_pullback = float(getattr(settings, "MTF_PULLBACK_MIN_DEPTH",   0.003)) # 0.3% below EMA50
+    vol_mult     = float(getattr(settings, "MTF_PULLBACK_VOL_MULT",    1.0))   # vol > SMA
+    cooldown     = int(getattr(settings, "MTF_PULLBACK_COOLDOWN_BARS",  8))    # 2h no re-entry
 
     ema_col = f'EMA_{ema_period}'
     rsi_col = f'RSI_{rsi_period}'
@@ -603,33 +607,56 @@ def apply_mtf_trend_pullback_strategy(df: pd.DataFrame) -> pd.DataFrame:
         delta = df['close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=rsi_period).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=rsi_period).mean()
-        rs = gain / loss.replace(0, np.nan)
-        rsi = 100 - (100 / (1 + rs))
-        df[rsi_col] = rsi.fillna(0)
+        rs   = gain / loss.replace(0, np.nan)
+        df[rsi_col] = (100 - (100 / (1 + rs))).fillna(0)
 
-    close = df['close']
-    ema_series = df[ema_col]
-    rsi_series = df[rsi_col]
+    close     = df['close']
+    ema_s     = df[ema_col]
+    rsi_s     = df[rsi_col]
     prev_close = close.shift(1)
-    bias = df['bias']
+    bias      = df['bias']
 
-    long_cond = (
+    # Volume SMA (use existing column if available, else compute)
+    vol_sma_col = 'Volume_SMA_20'
+    if vol_sma_col not in df.columns:
+        df[vol_sma_col] = df['volume'].rolling(20).mean()
+    vol_sma = df[vol_sma_col]
+
+    long_base = (
         (bias == 1) &
-        (close <= ema_series) &
-        (rsi_series < rsi_long) &
-        (close > prev_close)
+        (close <= ema_s) &
+        (close < ema_s * (1 - min_pullback)) &
+        (rsi_s < rsi_long) &
+        (close > prev_close) &
+        (df['volume'] >= vol_sma * vol_mult)
     )
-    short_cond = (
+    short_base = (
         (bias == -1) &
-        (close >= ema_series) &
-        (rsi_series > rsi_short) &
-        (close < prev_close)
+        (close >= ema_s) &
+        (close > ema_s * (1 + min_pullback)) &
+        (rsi_s > rsi_short) &
+        (close < prev_close) &
+        (df['volume'] >= vol_sma * vol_mult)
     )
 
-    df.loc[long_cond, 'signal'] = 1
-    df.loc[short_cond, 'signal'] = -1
+    # Cooldown: suppress re-entry if signal fired in the last cooldown bars
+    raw_signal = pd.Series(0, index=df.index)
+    raw_signal[long_base]  =  1
+    raw_signal[short_base] = -1
 
-    last_idx = df.index[-1]
+    signal = raw_signal.copy()
+    last_fire = -cooldown - 1
+    for i, (idx, val) in enumerate(raw_signal.items()):
+        if val != 0:
+            if i - last_fire > cooldown:
+                signal[idx] = val
+                last_fire = i
+            else:
+                signal[idx] = 0
+
+    df['signal'] = signal
+
+    last_idx    = df.index[-1]
     base_signal = int(df.at[last_idx, 'signal'])
     if base_signal == 1:
         logger.info("MTF pullback signal: BUY")
@@ -644,14 +671,18 @@ def apply_mtf_trend_pullback_strategy(df: pd.DataFrame) -> pd.DataFrame:
 def apply_funding_extreme_reversal_strategy(df: pd.DataFrame) -> pd.DataFrame:
     """
     Funding extreme reversal strategy signal generator.
-    LONG:
-      - funding_rate < -0.00007
-      - open_interest current >= previous
-      - close > previous_close
-    SHORT:
-      - funding_rate > 0.00007
-      - open_interest current >= previous
-      - close < previous_close
+
+    The core insight: fire ONCE when funding just crosses into extreme territory
+    (threshold-crossing detection), not on every candle while it stays extreme.
+
+    LONG (contrarian buy during funding panic):
+      - Funding rate just crossed BELOW long_threshold (new extreme negative)
+        OR funding < long_threshold AND was not signalled in last cooldown bars
+      - RSI(14) < rsi_max_long  (price already oversold)
+      - close > EMA_9  (showing reversal momentum / not in free-fall)
+      - open_interest change >= oi_min_change
+
+    SHORT (contrarian sell during funding euphoria): mirror of the above.
     """
     df['signal'] = 0
 
@@ -659,33 +690,73 @@ def apply_funding_extreme_reversal_strategy(df: pd.DataFrame) -> pd.DataFrame:
         logger.info("Funding extreme: missing funding_rate or open_interest -> no signals")
         return df
 
-    close = df['close']
+    close     = df['close']
     prev_close = close.shift(1)
-    oi = df['open_interest']
-    prev_oi = oi.shift(1)
-    fr = df['funding_rate']
-    long_threshold = float(getattr(settings, "FUNDING_EXTREME_LONG_THRESHOLD", -0.00007))
-    short_threshold = float(getattr(settings, "FUNDING_EXTREME_SHORT_THRESHOLD", 0.00007))
-    oi_min_change = float(getattr(settings, "FUNDING_EXTREME_MIN_OI_CHANGE", 0.0))
-    price_move_min = float(getattr(settings, "FUNDING_EXTREME_MIN_PRICE_MOVE", 0.0))
+    oi        = df['open_interest']
+    prev_oi   = oi.shift(1)
+    fr        = df['funding_rate']
+    prev_fr   = fr.shift(1)
+
+    long_threshold  = float(getattr(settings, "FUNDING_EXTREME_LONG_THRESHOLD",  -0.0003))
+    short_threshold = float(getattr(settings, "FUNDING_EXTREME_SHORT_THRESHOLD",  0.0003))
+    oi_min_change   = float(getattr(settings, "FUNDING_EXTREME_MIN_OI_CHANGE",    0.0))
+    rsi_max_long    = float(getattr(settings, "FUNDING_EXTREME_RSI_MAX_LONG",    45.0))
+    rsi_min_short   = float(getattr(settings, "FUNDING_EXTREME_RSI_MIN_SHORT",   55.0))
+    cooldown        = int(getattr(settings, "FUNDING_EXTREME_COOLDOWN_BARS",       16))  # 4h no re-entry
+
     oi_change = (oi - prev_oi) / prev_oi.replace(0, np.nan)
-    price_change = (close / prev_close.replace(0, np.nan)) - 1.0
 
-    long_cond = (
+    # RSI (compute if not already present)
+    rsi_col = 'RSI_14'
+    if rsi_col not in df.columns:
+        delta = close.diff()
+        gain  = (delta.where(delta > 0, 0)).rolling(14).mean()
+        loss  = (-delta.where(delta < 0, 0)).rolling(14).mean()
+        rs    = gain / loss.replace(0, np.nan)
+        df[rsi_col] = (100 - (100 / (1 + rs))).fillna(50)
+    rsi_s = df[rsi_col]
+
+    # EMA9 for momentum confirmation
+    ema9_col = 'EMA_9'
+    if ema9_col not in df.columns:
+        df[ema9_col] = close.ewm(span=9, adjust=False).mean()
+    ema9 = df[ema9_col]
+
+    # Threshold-crossing: funding just entered extreme zone
+    just_crossed_long  = (fr  < long_threshold)  & (prev_fr >= long_threshold)
+    just_crossed_short = (fr  > short_threshold) & (prev_fr <= short_threshold)
+
+    long_base = (
         (fr < long_threshold) &
-        (oi_change >= oi_min_change) &
-        (price_change >= price_move_min)
+        (rsi_s < rsi_max_long) &
+        (close > ema9) &                    # momentum turning up
+        (oi_change >= oi_min_change)
     )
-    short_cond = (
+    short_base = (
         (fr > short_threshold) &
-        (oi_change >= oi_min_change) &
-        (price_change <= -price_move_min)
+        (rsi_s > rsi_min_short) &
+        (close < ema9) &                    # momentum turning down
+        (oi_change >= oi_min_change)
     )
 
-    df.loc[long_cond, 'signal'] = 1
-    df.loc[short_cond, 'signal'] = -1
+    # Cooldown: suppress re-entry for cooldown bars after each signal
+    raw_signal = pd.Series(0, index=df.index)
+    raw_signal[long_base]  =  1
+    raw_signal[short_base] = -1
 
-    last_idx = df.index[-1]
+    signal    = raw_signal.copy()
+    last_fire = -cooldown - 1
+    for i, (idx, val) in enumerate(raw_signal.items()):
+        if val != 0:
+            if i - last_fire > cooldown:
+                signal[idx] = val
+                last_fire = i
+            else:
+                signal[idx] = 0
+
+    df['signal'] = signal
+
+    last_idx    = df.index[-1]
     base_signal = int(df.at[last_idx, 'signal'])
     if base_signal == 1:
         logger.info("Funding extreme signal: BUY")

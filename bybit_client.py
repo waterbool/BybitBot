@@ -3,6 +3,7 @@ from pybit.unified_trading import HTTP
 from typing import Dict, List, Optional
 import pandas as pd
 from datetime import datetime
+from tls_compat import patch_pybit_session
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class BybitClient:
                 api_key=api_key,
                 api_secret=api_secret,
             )
+            patch_pybit_session(self.session)
             logger.info(f"Bybit Client initialized (Testnet: {testnet}, Demo: {demo})")
         except Exception as e:
             logger.error(f"Failed to initialize Bybit Client: {e}")

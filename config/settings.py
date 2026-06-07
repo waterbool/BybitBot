@@ -7,6 +7,16 @@ from pathlib import Path
 # Base directory of the project
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load .env from project root if present (no hard dependency on python-dotenv)
+_env_file = BASE_DIR / ".env"
+if _env_file.exists():
+    with open(_env_file) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 # --- Load Config from YAML ---
 CONFIG_PATH = Path(os.getenv("BYBIT_BOT_CONFIG_PATH", BASE_DIR / "config.yaml"))
 
@@ -154,7 +164,14 @@ SL_ATR_MULT = SL_ATR_MULTIPLIER
 # New Strategy Settings
 SMA_TREND_PERIOD = 200
 DONCHIAN_PERIOD = 7
-RISK_PERCENT = config.get("risk", {}).get("risk_percent", 0.01) # 1% default
+RISK_PERCENT = _env_float("RISK_PERCENT", config.get("risk", {}).get("risk_percent", 0.01))
+
+# Risk-based position sizing
+# When enabled: position_size = (balance * RISK_PERCENT) / sl_distance
+# Capped at balance * MAX_POSITION_PCT
+RISK_BASED_SIZING  = _env_bool("RISK_BASED_SIZING",  config.get("risk", {}).get("risk_based_sizing", False))
+MAX_POSITION_PCT   = _env_float("MAX_POSITION_PCT",   config.get("risk", {}).get("max_position_pct", 0.10))
+PAPER_BALANCE_USDT = _env_float("PAPER_BALANCE_USDT", config.get("risk", {}).get("paper_balance_usdt", 50000.0))
 
 # Trading hours (store as simple integers for start/end hour)
 TRADING_START_HOUR = _env_int("TRADING_START_HOUR", config.get('strategy', {}).get('trading_start_hour', 0))
@@ -164,10 +181,15 @@ FIXED_USDT_SIZE = _env_float("FIXED_USDT_SIZE", config.get("trading", {}).get("f
 DRY_RUN = _env_bool("DRY_RUN", config.get("trading", {}).get("dry_run", True))
 
 # --- Strategy Variant Overrides ---
-FUNDING_EXTREME_LONG_THRESHOLD = _env_float("FUNDING_EXTREME_LONG_THRESHOLD", -0.00007)
-FUNDING_EXTREME_SHORT_THRESHOLD = _env_float("FUNDING_EXTREME_SHORT_THRESHOLD", 0.00007)
-FUNDING_EXTREME_MIN_OI_CHANGE = _env_float("FUNDING_EXTREME_MIN_OI_CHANGE", 0.0)
-FUNDING_EXTREME_MIN_PRICE_MOVE = _env_float("FUNDING_EXTREME_MIN_PRICE_MOVE", 0.0)
+_strategy_cfg = config.get("strategy", {})
+
+FUNDING_EXTREME_LONG_THRESHOLD  = _env_float("FUNDING_EXTREME_LONG_THRESHOLD",  _strategy_cfg.get("funding_extreme_long_threshold",  -0.0003))
+FUNDING_EXTREME_SHORT_THRESHOLD = _env_float("FUNDING_EXTREME_SHORT_THRESHOLD", _strategy_cfg.get("funding_extreme_short_threshold",  0.0003))
+FUNDING_EXTREME_MIN_OI_CHANGE   = _env_float("FUNDING_EXTREME_MIN_OI_CHANGE",   0.0)
+FUNDING_EXTREME_MIN_PRICE_MOVE  = _env_float("FUNDING_EXTREME_MIN_PRICE_MOVE",  0.0)
+FUNDING_EXTREME_RSI_MAX_LONG    = _env_float("FUNDING_EXTREME_RSI_MAX_LONG",    _strategy_cfg.get("funding_extreme_rsi_max_long",  45.0))
+FUNDING_EXTREME_RSI_MIN_SHORT   = _env_float("FUNDING_EXTREME_RSI_MIN_SHORT",   _strategy_cfg.get("funding_extreme_rsi_min_short", 55.0))
+FUNDING_EXTREME_COOLDOWN_BARS   = _env_int(  "FUNDING_EXTREME_COOLDOWN_BARS",   _strategy_cfg.get("funding_extreme_cooldown_bars",  16))
 
 MEAN_REV_EMA_PERIOD = _env_int("MEAN_REV_EMA_PERIOD", 50)
 MEAN_REV_RSI_PERIOD = _env_int("MEAN_REV_RSI_PERIOD", 14)
@@ -185,10 +207,13 @@ VOL_COMP_BB_PERIOD = _env_int("VOL_COMP_BB_PERIOD", 20)
 VOL_COMP_BB_STD = _env_float("VOL_COMP_BB_STD", 2.0)
 VOL_COMP_BB_WIDTH_MULT = _env_float("VOL_COMP_BB_WIDTH_MULT", 1.10)
 
-MTF_PULLBACK_EMA_PERIOD = _env_int("MTF_PULLBACK_EMA_PERIOD", 50)
-MTF_PULLBACK_RSI_PERIOD = _env_int("MTF_PULLBACK_RSI_PERIOD", 14)
-MTF_PULLBACK_RSI_LONG = _env_float("MTF_PULLBACK_RSI_LONG", 45.0)
-MTF_PULLBACK_RSI_SHORT = _env_float("MTF_PULLBACK_RSI_SHORT", 55.0)
+MTF_PULLBACK_EMA_PERIOD    = _env_int(  "MTF_PULLBACK_EMA_PERIOD",    _strategy_cfg.get("mtf_pullback_ema_period",    50))
+MTF_PULLBACK_RSI_PERIOD    = _env_int(  "MTF_PULLBACK_RSI_PERIOD",    14)
+MTF_PULLBACK_RSI_LONG      = _env_float("MTF_PULLBACK_RSI_LONG",      _strategy_cfg.get("mtf_pullback_rsi_long",      40.0))
+MTF_PULLBACK_RSI_SHORT     = _env_float("MTF_PULLBACK_RSI_SHORT",     _strategy_cfg.get("mtf_pullback_rsi_short",     60.0))
+MTF_PULLBACK_MIN_DEPTH     = _env_float("MTF_PULLBACK_MIN_DEPTH",     _strategy_cfg.get("mtf_pullback_min_depth",     0.003))
+MTF_PULLBACK_VOL_MULT      = _env_float("MTF_PULLBACK_VOL_MULT",      _strategy_cfg.get("mtf_pullback_vol_mult",      1.0))
+MTF_PULLBACK_COOLDOWN_BARS = _env_int(  "MTF_PULLBACK_COOLDOWN_BARS", _strategy_cfg.get("mtf_pullback_cooldown_bars", 8))
 
 # --- Risk Management ---
 MAX_TRADES_PER_DAY = config.get("risk", {}).get("max_trades_per_day", 10)

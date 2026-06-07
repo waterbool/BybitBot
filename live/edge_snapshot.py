@@ -14,7 +14,14 @@ def build_edge_snapshot(
     lookback_days: int | None = None,
     initial_balance: float | None = None,
     enable_ml: bool = False,
+    use_live_data: bool = True,
 ) -> dict:
+    """Build an edge snapshot by running backtests for all symbol × strategy pairs.
+
+    Args:
+        use_live_data: Fetch market data from Bybit API instead of CSV files
+                       (default True — no CSV download step required).
+    """
     symbols = normalize_symbols(symbols)
     strategies = strategy_names or list(DEFAULT_STRATEGIES)
     lookback_days = int(lookback_days if lookback_days is not None else settings.LIVE_SELECTOR_EDGE_LOOKBACK_DAYS)
@@ -26,6 +33,7 @@ def build_edge_snapshot(
         lookback_days=lookback_days,
         initial_balance=initial_balance,
         enable_ml=enable_ml,
+        use_live_data=use_live_data,
     )
 
     rows = []

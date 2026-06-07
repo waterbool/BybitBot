@@ -1,12 +1,67 @@
 from __future__ import annotations
 
+import logging
+import time
 from pathlib import Path
 
 import pandas as pd
 
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DIR = BASE_DIR / "data" / "raw"
+
+
+# ── Live fetch helpers (no CSV needed) ───────────────────────────────────────
+
+def _fetch_live_klines(symbol: str, interval: str, lookback_days: int,
+                       warmup_days: int = 0) -> pd.DataFrame:
+    """Fetch OHLCV klines directly from Bybit API. No CSV required."""
+    from data_fetch.bybit_client import fetch_historical_klines
+    from config import settings
+
+    total_days = lookback_days + warmup_days
+    now_ms = int(time.time() * 1000)
+    start_ms = now_ms - int(total_days * 24 * 3600 * 1000)
+
+    logger.info("Fetching live %s %sm (%d days) from Bybit…", symbol, interval, total_days)
+    df = fetch_historical_klines(symbol, interval, start_ms, now_ms,
+                                 category=settings.BYBIT_CATEGORY)
+    if df.empty:
+        return df
+    df = df[["timestamp", "open", "high", "low", "close", "volume"]].copy()
+    df["timestamp"] = pd.to_datetime(df["timestamp"].astype("int64"), unit="ms", utc=True)
+    return df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp")
+
+
+def _fetch_live_funding(symbol: str, lookback_days: int) -> pd.DataFrame:
+    from data_fetch.bybit_client import fetch_funding_rate_history
+    from config import settings
+
+    now_ms = int(time.time() * 1000)
+    start_ms = now_ms - int(lookback_days * 24 * 3600 * 1000)
+    df = fetch_funding_rate_history(symbol, start_ms, now_ms,
+                                    category=settings.BYBIT_CATEGORY)
+    if df.empty:
+        return df
+    df = df[["timestamp", "funding_rate"]].copy()
+    df["timestamp"] = pd.to_datetime(df["timestamp"].astype("int64"), unit="ms", utc=True)
+    return df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp")
+
+
+def _fetch_live_oi(symbol: str, lookback_days: int) -> pd.DataFrame:
+    from data_fetch.bybit_client import fetch_open_interest_history
+    from config import settings
+
+    now_ms = int(time.time() * 1000)
+    start_ms = now_ms - int(lookback_days * 24 * 3600 * 1000)
+    df = fetch_open_interest_history(symbol, "15min", start_ms, now_ms,
+                                     category=settings.BYBIT_CATEGORY)
+    if df.empty:
+        return df
+    df = df[["timestamp", "open_interest"]].copy()
+    df["timestamp"] = pd.to_datetime(df["timestamp"].astype("int64"), unit="ms", utc=True)
+    return df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp")
 
 
 def symbol_slug(symbol: str) -> str:
@@ -106,6 +161,70 @@ def build_funding_frame(symbol: str, lookback_days: int, context_days: int = 7) 
     merged = pd.merge_asof(
         merged.sort_values("timestamp"),
         df_oi.sort_values("timestamp"),
+        on="timestamp",
+        direction="backward",
+    )
+    return merged.set_index("timestamp")
+
+
+# ── Live variants (fetch directly from Bybit, no CSV) ────────────────────────
+
+def load_base_15m_live(symbol: str, lookback_days: int) -> pd.DataFrame:
+    """Same as load_base_15m but fetches data live from Bybit API."""
+    df = _fetch_live_klines(symbol, "15", lookback_days)
+    df = trim_lookback(df, lookback_days)
+    if df.empty:
+        logger.warning("Empty live 15m data for %s — falling back to CSV", symbol)
+        return load_base_15m(symbol, lookback_days)
+    return df.set_index("timestamp")
+
+
+def build_mtf_frame_live(symbol: str, lookback_days: int,
+                          bias_warmup_days: int = 30) -> pd.DataFrame:
+    """Same as build_mtf_frame but fetches data live from Bybit API."""
+    df_15m = _fetch_live_klines(symbol, "15", lookback_days, warmup_days=0)
+    df_1h  = _fetch_live_klines(symbol, "60", lookback_days, warmup_days=bias_warmup_days)
+    df_15m = trim_lookback(df_15m, lookback_days)
+
+    if df_15m.empty or df_1h.empty:
+        logger.warning("Empty live data for %s — falling back to CSV", symbol)
+        return build_mtf_frame(symbol, lookback_days, bias_warmup_days)
+
+    df_1h["ema200_1h"] = df_1h["close"].ewm(span=200, adjust=False).mean()
+    df_1h["bias"] = 0
+    df_1h.loc[df_1h["close"] > df_1h["ema200_1h"], "bias"] = 1
+    df_1h.loc[df_1h["close"] < df_1h["ema200_1h"], "bias"] = -1
+
+    merged = pd.merge_asof(
+        df_15m.sort_values("timestamp"),
+        df_1h[["timestamp", "bias", "ema200_1h"]].sort_values("timestamp"),
+        on="timestamp",
+        direction="backward",
+    )
+    return merged.set_index("timestamp")
+
+
+def build_funding_frame_live(symbol: str, lookback_days: int,
+                              context_days: int = 7) -> pd.DataFrame:
+    """Same as build_funding_frame but fetches data live from Bybit API."""
+    df_15m    = _fetch_live_klines(symbol, "15", lookback_days)
+    df_funding = _fetch_live_funding(symbol, lookback_days + context_days)
+    df_oi      = _fetch_live_oi(symbol, lookback_days + context_days)
+    df_15m = trim_lookback(df_15m, lookback_days)
+
+    if df_15m.empty:
+        logger.warning("Empty live klines for %s — falling back to CSV", symbol)
+        return build_funding_frame(symbol, lookback_days, context_days)
+
+    merged = pd.merge_asof(
+        df_15m.sort_values("timestamp"),
+        df_funding.sort_values("timestamp") if not df_funding.empty else df_15m[["timestamp"]],
+        on="timestamp",
+        direction="backward",
+    )
+    merged = pd.merge_asof(
+        merged.sort_values("timestamp"),
+        df_oi.sort_values("timestamp") if not df_oi.empty else df_15m[["timestamp"]],
         on="timestamp",
         direction="backward",
     )
